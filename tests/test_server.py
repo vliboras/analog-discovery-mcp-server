@@ -39,6 +39,8 @@ def test_registers_expected_tools() -> None:
     register_tools(mcp, service)
 
     assert set(mcp.tools) == {
+        "capture_analog_waveform",
+        "get_analog_capture_limits",
         "get_waveforms_version",
         "list_devices",
         "read_analog_voltage",

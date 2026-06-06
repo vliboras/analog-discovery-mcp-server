@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add fake-backed analog waveform capture tools.
+- Add analog capture limit reporting.
 - Add deterministic fake backend for MCP demos without hardware.
 - Add `AD_MCP_DWF_BACKEND` backend selection.
 - Document fake backend usage.

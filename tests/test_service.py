@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from analog_discovery_mcp.dwf import DeviceInfo, DwfError
+import pytest
+
+from analog_discovery_mcp.dwf import AnalogCaptureLimits, CtypesDwfAdapter, DeviceInfo, DwfError
 from analog_discovery_mcp.service import (
     ENV_DEVICE_INDEX,
     ENV_DEVICE_SERIAL,
@@ -195,3 +197,100 @@ def test_read_voltage_reports_sdk_read_error(sample_devices: list[DeviceInfo]) -
     assert result.ok is False
     assert result.error == "read failed"
     assert adapter.read_calls == [(0, 0)]
+
+
+def test_capture_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
+    adapter = FakeDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    result = service.capture_analog_waveform()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["sample_count"] == 1000
+    assert result.data["channels"] == [1]
+    assert len(result.data["samples"]["1"]) == 1000
+    assert adapter.capture_calls == [(0, [0], 1000.0, 1000)]
+
+
+def test_capture_rejects_empty_channels(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(channels=[])
+
+    assert result.ok is False
+    assert result.error == "channels must not be empty"
+
+
+def test_capture_rejects_duplicate_channels(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(channels=[1, 1])
+
+    assert result.ok is False
+    assert result.error == "channels must not contain duplicates"
+
+
+def test_capture_rejects_unsupported_channels(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(channels=[3])
+
+    assert result.ok is False
+    assert result.error == "channels must only contain supported channels [1, 2]; got [3]"
+
+
+def test_capture_rejects_invalid_sample_rate(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(sample_rate_hz=0)
+
+    assert result.ok is False
+    assert result.error == "sample_rate_hz must be positive"
+
+
+def test_capture_rejects_invalid_sample_count(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(sample_count=32_769)
+
+    assert result.ok is False
+    assert result.error == "sample_count must be between 1 and 32768"
+
+
+def test_capture_rejects_excessive_total_samples(sample_devices: list[DeviceInfo]) -> None:
+    class LowTotalLimitAdapter(FakeDwfAdapter):
+        def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
+            return AnalogCaptureLimits(
+                supported_channels=[1, 2],
+                default_sample_rate_hz=1000.0,
+                default_sample_count=1000,
+                max_sample_count_per_channel=32_768,
+                max_total_returned_samples=8,
+            )
+
+    service = AnalogDiscoveryService(LowTotalLimitAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(channels=[1, 2], sample_count=5)
+
+    assert result.ok is False
+    assert result.error == "total returned samples must be at most 8"
+
+
+def test_real_backend_capture_limits_are_unimplemented() -> None:
+    adapter = CtypesDwfAdapter.__new__(CtypesDwfAdapter)
+
+    with pytest.raises(DwfError, match="analog waveform capture is not implemented"):
+        adapter.get_analog_capture_limits(device_index=0)
+
+
+def test_real_backend_capture_is_unimplemented() -> None:
+    adapter = CtypesDwfAdapter.__new__(CtypesDwfAdapter)
+
+    with pytest.raises(DwfError, match="analog waveform capture is not implemented"):
+        adapter.capture_analog_waveform(
+            device_index=0,
+            channel_indices=[0],
+            sample_rate_hz=1000.0,
+            sample_count=8,
+        )

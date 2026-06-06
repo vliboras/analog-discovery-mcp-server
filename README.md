@@ -101,6 +101,26 @@ Inputs:
 - `device_index`: optional zero-based device index
 - `serial_number`: optional device serial number
 
+### `get_analog_capture_limits`
+
+Returns analog waveform capture limits for the selected device.
+
+The fake backend reports AD3-like limits: 32,768 samples per channel and 65,536 total returned samples.
+
+### `capture_analog_waveform`
+
+Captures analog input waveform samples.
+
+Inputs:
+
+- `channels`: optional list containing `1`, `2`, or both; default `[1]`
+- `sample_rate_hz`: positive sample rate; default `1000.0`
+- `sample_count`: samples per channel; default `1000`
+- `device_index`: optional zero-based device index
+- `serial_number`: optional device serial number
+
+The server rejects requests above reported capture limits. It does not silently truncate or clamp sample arrays.
+
 ## Development
 
 ```bash

@@ -31,6 +31,8 @@ async def _call_fake_backend_tools() -> None:
         tools = await session.list_tools()
         tool_names = {tool.name for tool in tools.tools}
         assert tool_names >= {
+            "capture_analog_waveform",
+            "get_analog_capture_limits",
             "get_waveforms_version",
             "list_devices",
             "read_analog_voltage",
@@ -53,6 +55,21 @@ async def _call_fake_backend_tools() -> None:
         assert voltage_payload["ok"] is True
         assert voltage_payload["data"]["voltage"] == 2.5
         assert voltage_payload["data"]["channel"] == 2
+
+        limits = await session.call_tool("get_analog_capture_limits", {})
+        limits_payload = _structured_content(limits)
+        assert limits_payload["ok"] is True
+        assert limits_payload["data"]["max_sample_count_per_channel"] == 32_768
+
+        capture = await session.call_tool(
+            "capture_analog_waveform",
+            {"channels": [1, 2], "sample_count": 8},
+        )
+        capture_payload = _structured_content(capture)
+        assert capture_payload["ok"] is True
+        assert capture_payload["data"]["channels"] == [1, 2]
+        assert len(capture_payload["data"]["samples"]["1"]) == 8
+        assert len(capture_payload["data"]["samples"]["2"]) == 8
 
 
 def _structured_content(result: Any) -> dict[str, Any]:

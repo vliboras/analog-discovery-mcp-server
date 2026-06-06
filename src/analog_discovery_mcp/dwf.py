@@ -33,6 +33,23 @@ class DeviceInfo:
     available: bool = True
 
 
+@dataclass(frozen=True)
+class AnalogCaptureLimits:
+    supported_channels: list[int]
+    default_sample_rate_hz: float
+    default_sample_count: int
+    max_sample_count_per_channel: int
+    max_total_returned_samples: int
+
+
+@dataclass(frozen=True)
+class AnalogCapture:
+    sample_rate_hz: float
+    sample_count: int
+    channels: list[int]
+    samples: dict[str, list[float]]
+
+
 class DwfAdapter(Protocol):
     def get_version(self) -> str:
         """Return the WaveForms SDK version."""
@@ -42,6 +59,18 @@ class DwfAdapter(Protocol):
 
     def read_analog_voltage(self, device_index: int, channel_index: int) -> float:
         """Read one voltage sample from zero-based analog input channel."""
+
+    def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
+        """Return analog capture limits for the selected device."""
+
+    def capture_analog_waveform(
+        self,
+        device_index: int,
+        channel_indices: list[int],
+        sample_rate_hz: float,
+        sample_count: int,
+    ) -> AnalogCapture:
+        """Capture analog input waveform samples."""
 
 
 def default_library_path() -> str:
@@ -116,6 +145,18 @@ class CtypesDwfAdapter:
         finally:
             self._dwf.FDwfDeviceClose(handle)
 
+    def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
+        raise DwfError("analog waveform capture is not implemented for real backend yet")
+
+    def capture_analog_waveform(
+        self,
+        device_index: int,
+        channel_indices: list[int],
+        sample_rate_hz: float,
+        sample_count: int,
+    ) -> AnalogCapture:
+        raise DwfError("analog waveform capture is not implemented for real backend yet")
+
     def _require_ok(self, result: int) -> None:
         if not result:
             raise DwfError(self._last_error_message("WaveForms SDK call failed"))
@@ -152,6 +193,23 @@ class LazyDwfAdapter:
 
     def read_analog_voltage(self, device_index: int, channel_index: int) -> float:
         return self._get_adapter().read_analog_voltage(device_index, channel_index)
+
+    def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
+        return self._get_adapter().get_analog_capture_limits(device_index)
+
+    def capture_analog_waveform(
+        self,
+        device_index: int,
+        channel_indices: list[int],
+        sample_rate_hz: float,
+        sample_count: int,
+    ) -> AnalogCapture:
+        return self._get_adapter().capture_analog_waveform(
+            device_index,
+            channel_indices,
+            sample_rate_hz,
+            sample_count,
+        )
 
     def _get_adapter(self) -> CtypesDwfAdapter:
         if self._adapter is None:

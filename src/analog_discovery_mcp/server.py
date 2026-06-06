@@ -51,6 +51,36 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
             serial_number=serial_number,
         ).model_dump(exclude_none=True)
 
+    @mcp.tool()
+    def get_analog_capture_limits(
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Return analog waveform capture limits for the selected device."""
+
+        return service.get_analog_capture_limits(
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def capture_analog_waveform(
+        channels: list[int] | None = None,
+        sample_rate_hz: float = 1000.0,
+        sample_count: int = 1000,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Capture analog input waveform samples from channel 1 and/or 2."""
+
+        return service.capture_analog_waveform(
+            channels=channels,
+            sample_rate_hz=sample_rate_hz,
+            sample_count=sample_count,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
 
 def main() -> None:
     create_mcp_server().run()

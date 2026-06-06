@@ -7,10 +7,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from analog_discovery_mcp.dwf import DeviceInfo, DwfAdapter, DwfError
+from analog_discovery_mcp.dwf import AnalogCaptureLimits, DeviceInfo, DwfAdapter, DwfError
 
 ENV_DEVICE_INDEX = "AD_MCP_DEVICE_INDEX"
 ENV_DEVICE_SERIAL = "AD_MCP_DEVICE_SERIAL"
+DEFAULT_CAPTURE_CHANNELS = [1]
+DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
+DEFAULT_CAPTURE_SAMPLE_COUNT = 1000
 
 
 class ToolResult(BaseModel):
@@ -58,6 +61,64 @@ class AnalogDiscoveryService:
                     "voltage": voltage,
                     "unit": "V",
                     "channel": channel,
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def get_analog_capture_limits(
+        self,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_analog_capture_limits(selected_device.index)
+            return ToolResult(
+                ok=True,
+                data={
+                    **asdict(limits),
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def capture_analog_waveform(
+        self,
+        channels: list[int] | None = None,
+        sample_rate_hz: float = DEFAULT_CAPTURE_SAMPLE_RATE_HZ,
+        sample_count: int = DEFAULT_CAPTURE_SAMPLE_COUNT,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        requested_channels = DEFAULT_CAPTURE_CHANNELS if channels is None else channels
+
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_analog_capture_limits(selected_device.index)
+            self._validate_capture_request(
+                requested_channels,
+                sample_rate_hz,
+                sample_count,
+                limits,
+            )
+            capture = self._adapter.capture_analog_waveform(
+                device_index=selected_device.index,
+                channel_indices=[channel - 1 for channel in requested_channels],
+                sample_rate_hz=sample_rate_hz,
+                sample_count=sample_count,
+            )
+            return ToolResult(
+                ok=True,
+                data={
+                    "requested_sample_rate_hz": sample_rate_hz,
+                    "actual_sample_rate_hz": capture.sample_rate_hz,
+                    "sample_count": capture.sample_count,
+                    "duration_seconds": capture.sample_count / capture.sample_rate_hz,
+                    "channels": capture.channels,
+                    "samples": capture.samples,
                     "device": asdict(selected_device),
                 },
             )
@@ -117,6 +178,42 @@ class AnalogDiscoveryService:
                 raise ValueError(f"{ENV_DEVICE_INDEX} must be an integer") from exc
 
         return None, None
+
+    def _validate_capture_request(
+        self,
+        channels: list[int],
+        sample_rate_hz: float,
+        sample_count: int,
+        limits: AnalogCaptureLimits,
+    ) -> None:
+        if not channels:
+            raise ValueError("channels must not be empty")
+
+        if len(set(channels)) != len(channels):
+            raise ValueError("channels must not contain duplicates")
+
+        unsupported_channels = sorted(set(channels) - set(limits.supported_channels))
+        if unsupported_channels:
+            raise ValueError(
+                "channels must only contain supported channels "
+                f"{limits.supported_channels}; got {unsupported_channels}"
+            )
+
+        if sample_rate_hz <= 0:
+            raise ValueError("sample_rate_hz must be positive")
+
+        if sample_count < 1 or sample_count > limits.max_sample_count_per_channel:
+            raise ValueError(
+                "sample_count must be between 1 and "
+                f"{limits.max_sample_count_per_channel}"
+            )
+
+        total_samples = len(channels) * sample_count
+        if total_samples > limits.max_total_returned_samples:
+            raise ValueError(
+                "total returned samples must be at most "
+                f"{limits.max_total_returned_samples}"
+            )
 
 
 class ReadAnalogVoltageInput(BaseModel):
