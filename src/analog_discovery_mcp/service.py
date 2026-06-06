@@ -197,13 +197,11 @@ def _validate_capture_request(
 
     if sample_count < 1 or sample_count > limits.max_sample_count_per_channel:
         raise ValueError(
-            "sample_count must be between 1 and "
-            f"{limits.max_sample_count_per_channel}"
+            f"sample_count must be between 1 and {limits.max_sample_count_per_channel}"
         )
 
     total_samples = len(channels) * sample_count
     if total_samples > limits.max_total_returned_samples:
         raise ValueError(
-            "total returned samples must be at most "
-            f"{limits.max_total_returned_samples}"
+            f"total returned samples must be at most {limits.max_total_returned_samples}"
         )

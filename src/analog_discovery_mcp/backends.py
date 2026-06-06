@@ -23,6 +23,4 @@ def create_dwf_adapter(environ: Mapping[str, str] | None = None) -> DwfAdapter:
     if backend == "fake":
         return FakeDwfAdapter()
 
-    raise BackendConfigError(
-        f"{ENV_DWF_BACKEND} must be 'real' or 'fake', got {backend!r}"
-    )
+    raise BackendConfigError(f"{ENV_DWF_BACKEND} must be 'real' or 'fake', got {backend!r}")
