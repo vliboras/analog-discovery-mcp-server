@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from analog_discovery_mcp.dwf import AnalogCaptureLimits, CtypesDwfAdapter, DeviceInfo, DwfError
+from analog_discovery_mcp.dwf import CtypesDwfAdapter, DwfError
+from analog_discovery_mcp.models import AnalogCaptureLimits, DeviceInfo
 from analog_discovery_mcp.service import (
     ENV_DEVICE_INDEX,
     ENV_DEVICE_SERIAL,

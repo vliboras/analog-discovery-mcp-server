@@ -3,23 +3,16 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import asdict
-from typing import Any
 
-from pydantic import BaseModel, Field
-
-from analog_discovery_mcp.dwf import AnalogCaptureLimits, DeviceInfo, DwfAdapter, DwfError
+from analog_discovery_mcp.adapters import DwfAdapter
+from analog_discovery_mcp.dwf import DwfError
+from analog_discovery_mcp.models import AnalogCaptureLimits, DeviceInfo, ToolResult
 
 ENV_DEVICE_INDEX = "AD_MCP_DEVICE_INDEX"
 ENV_DEVICE_SERIAL = "AD_MCP_DEVICE_SERIAL"
 DEFAULT_CAPTURE_CHANNELS = [1]
 DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
 DEFAULT_CAPTURE_SAMPLE_COUNT = 1000
-
-
-class ToolResult(BaseModel):
-    ok: bool
-    data: dict[str, Any] | None = None
-    error: str | None = None
 
 
 class AnalogDiscoveryService:
@@ -98,7 +91,7 @@ class AnalogDiscoveryService:
         try:
             selected_device = self._select_device(device_index, serial_number)
             limits = self._adapter.get_analog_capture_limits(selected_device.index)
-            self._validate_capture_request(
+            _validate_capture_request(
                 requested_channels,
                 sample_rate_hz,
                 sample_count,
@@ -179,44 +172,38 @@ class AnalogDiscoveryService:
 
         return None, None
 
-    def _validate_capture_request(
-        self,
-        channels: list[int],
-        sample_rate_hz: float,
-        sample_count: int,
-        limits: AnalogCaptureLimits,
-    ) -> None:
-        if not channels:
-            raise ValueError("channels must not be empty")
 
-        if len(set(channels)) != len(channels):
-            raise ValueError("channels must not contain duplicates")
+def _validate_capture_request(
+    channels: list[int],
+    sample_rate_hz: float,
+    sample_count: int,
+    limits: AnalogCaptureLimits,
+) -> None:
+    if not channels:
+        raise ValueError("channels must not be empty")
 
-        unsupported_channels = sorted(set(channels) - set(limits.supported_channels))
-        if unsupported_channels:
-            raise ValueError(
-                "channels must only contain supported channels "
-                f"{limits.supported_channels}; got {unsupported_channels}"
-            )
+    if len(set(channels)) != len(channels):
+        raise ValueError("channels must not contain duplicates")
 
-        if sample_rate_hz <= 0:
-            raise ValueError("sample_rate_hz must be positive")
+    unsupported_channels = sorted(set(channels) - set(limits.supported_channels))
+    if unsupported_channels:
+        raise ValueError(
+            "channels must only contain supported channels "
+            f"{limits.supported_channels}; got {unsupported_channels}"
+        )
 
-        if sample_count < 1 or sample_count > limits.max_sample_count_per_channel:
-            raise ValueError(
-                "sample_count must be between 1 and "
-                f"{limits.max_sample_count_per_channel}"
-            )
+    if sample_rate_hz <= 0:
+        raise ValueError("sample_rate_hz must be positive")
 
-        total_samples = len(channels) * sample_count
-        if total_samples > limits.max_total_returned_samples:
-            raise ValueError(
-                "total returned samples must be at most "
-                f"{limits.max_total_returned_samples}"
-            )
+    if sample_count < 1 or sample_count > limits.max_sample_count_per_channel:
+        raise ValueError(
+            "sample_count must be between 1 and "
+            f"{limits.max_sample_count_per_channel}"
+        )
 
-
-class ReadAnalogVoltageInput(BaseModel):
-    channel: int = Field(description="Analog input channel, 1 or 2")
-    device_index: int | None = Field(default=None, description="Optional zero-based device index")
-    serial_number: str | None = Field(default=None, description="Optional device serial number")
+    total_samples = len(channels) * sample_count
+    if total_samples > limits.max_total_returned_samples:
+        raise ValueError(
+            "total returned samples must be at most "
+            f"{limits.max_total_returned_samples}"
+        )

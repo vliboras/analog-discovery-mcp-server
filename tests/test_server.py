@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar, get_type_hints
 
-from analog_discovery_mcp.dwf import DeviceInfo
+from analog_discovery_mcp.models import DeviceInfo
 from analog_discovery_mcp.server import create_mcp_server, register_tools
 from analog_discovery_mcp.service import AnalogDiscoveryService
 from tests.conftest import FakeDwfAdapter

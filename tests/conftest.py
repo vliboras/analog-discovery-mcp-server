@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from analog_discovery_mcp.dwf import (
+from analog_discovery_mcp.adapters import DwfAdapter
+from analog_discovery_mcp.dwf import DwfError
+from analog_discovery_mcp.models import (
     AnalogCapture,
     AnalogCaptureLimits,
     DeviceInfo,
-    DwfAdapter,
-    DwfError,
 )
 
 

@@ -5,8 +5,8 @@ from typing import Any, Protocol, TypeVar, cast
 
 from mcp.server.fastmcp import FastMCP
 
+from analog_discovery_mcp.adapters import DwfAdapter
 from analog_discovery_mcp.backends import create_dwf_adapter
-from analog_discovery_mcp.dwf import DwfAdapter
 from analog_discovery_mcp.service import AnalogDiscoveryService
 
 F = TypeVar("F", bound=Callable[..., object])

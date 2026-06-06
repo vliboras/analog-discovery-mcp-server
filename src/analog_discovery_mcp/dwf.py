@@ -9,8 +9,9 @@ from ctypes import (
     c_int,
     create_string_buffer,
 )
-from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, cast
+
+from analog_discovery_mcp.models import AnalogCapture, AnalogCaptureLimits, DeviceInfo
 
 
 class DwfError(RuntimeError):
@@ -23,54 +24,6 @@ class DwfUnavailableError(DwfError):
 
 class DeviceOpenError(DwfError):
     """Raised when a selected WaveForms device cannot be opened."""
-
-
-@dataclass(frozen=True)
-class DeviceInfo:
-    index: int
-    name: str
-    serial_number: str
-    available: bool = True
-
-
-@dataclass(frozen=True)
-class AnalogCaptureLimits:
-    supported_channels: list[int]
-    default_sample_rate_hz: float
-    default_sample_count: int
-    max_sample_count_per_channel: int
-    max_total_returned_samples: int
-
-
-@dataclass(frozen=True)
-class AnalogCapture:
-    sample_rate_hz: float
-    sample_count: int
-    channels: list[int]
-    samples: dict[str, list[float]]
-
-
-class DwfAdapter(Protocol):
-    def get_version(self) -> str:
-        """Return the WaveForms SDK version."""
-
-    def list_devices(self) -> list[DeviceInfo]:
-        """Return connected WaveForms devices."""
-
-    def read_analog_voltage(self, device_index: int, channel_index: int) -> float:
-        """Read one voltage sample from zero-based analog input channel."""
-
-    def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
-        """Return analog capture limits for the selected device."""
-
-    def capture_analog_waveform(
-        self,
-        device_index: int,
-        channel_indices: list[int],
-        sample_rate_hz: float,
-        sample_count: int,
-    ) -> AnalogCapture:
-        """Capture analog input waveform samples."""
 
 
 def default_library_path() -> str:

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Refactor adapter protocol and shared models into separate modules.
 - Add fake-backed analog waveform capture tools.
 - Add analog capture limit reporting.
 - Add deterministic fake backend for MCP demos without hardware.

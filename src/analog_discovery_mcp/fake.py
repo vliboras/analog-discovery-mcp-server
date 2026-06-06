@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from analog_discovery_mcp.dwf import AnalogCapture, AnalogCaptureLimits, DeviceInfo
+from analog_discovery_mcp.models import AnalogCapture, AnalogCaptureLimits, DeviceInfo
 
 FAKE_DEFAULT_SAMPLE_RATE_HZ = 1000.0
 FAKE_DEFAULT_SAMPLE_COUNT = 1000

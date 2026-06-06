@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
-from analog_discovery_mcp.dwf import DwfAdapter, LazyDwfAdapter
+from analog_discovery_mcp.adapters import DwfAdapter
+from analog_discovery_mcp.dwf import LazyDwfAdapter
 from analog_discovery_mcp.fake import FakeDwfAdapter
 
 ENV_DWF_BACKEND = "AD_MCP_DWF_BACKEND"
