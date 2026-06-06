@@ -38,6 +38,16 @@ uv run analog-discovery-mcp-server
 
 The server uses MCP stdio transport. Your MCP client starts this process and talks to it over standard input/output; no port or web server is opened.
 
+## Run Without Hardware
+
+Use the fake backend to test MCP client wiring when no Analog Discovery device is connected:
+
+```bash
+AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
+```
+
+The fake backend is deterministic and for demos only. It reports one fake Analog Discovery 3 device and fixed voltage readings for channels 1 and 2.
+
 ## MCP Client Configuration
 
 Example local configuration:
@@ -98,6 +108,12 @@ uv sync
 uv run ruff check
 uv run mypy
 uv run pytest
+```
+
+Test the MCP server without hardware:
+
+```bash
+AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
 ```
 
 Hardware integration tests are skipped by default. Enable them explicitly:

@@ -24,6 +24,12 @@ uv run analog-discovery-mcp-server
 
 The server uses MCP stdio transport, so it normally runs under an MCP client.
 
+Run with deterministic fake hardware:
+
+```bash
+AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
+```
+
 ## Hardware Tests
 
 Unit tests do not require Digilent hardware or WaveForms SDK.

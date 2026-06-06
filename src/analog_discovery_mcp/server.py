@@ -5,7 +5,8 @@ from typing import Any, Protocol, TypeVar, cast
 
 from mcp.server.fastmcp import FastMCP
 
-from analog_discovery_mcp.dwf import DwfAdapter, LazyDwfAdapter
+from analog_discovery_mcp.backends import create_dwf_adapter
+from analog_discovery_mcp.dwf import DwfAdapter
 from analog_discovery_mcp.service import AnalogDiscoveryService
 
 F = TypeVar("F", bound=Callable[..., object])
@@ -17,7 +18,7 @@ class ToolRegistrar(Protocol):
 
 
 def create_mcp_server(adapter: DwfAdapter | None = None) -> FastMCP:
-    service = AnalogDiscoveryService(adapter or LazyDwfAdapter())
+    service = AnalogDiscoveryService(adapter or create_dwf_adapter())
     mcp = FastMCP("Analog Discovery")
     register_tools(cast(ToolRegistrar, mcp), service)
     return mcp

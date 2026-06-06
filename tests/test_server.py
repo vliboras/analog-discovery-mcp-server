@@ -51,6 +51,14 @@ def test_create_server_does_not_require_waveforms_sdk_at_startup() -> None:
     assert server.name == "Analog Discovery"
 
 
+def test_create_server_uses_fake_backend_from_env(monkeypatch: Any) -> None:
+    monkeypatch.setenv("AD_MCP_DWF_BACKEND", "fake")
+
+    server = create_mcp_server()
+
+    assert server.name == "Analog Discovery"
+
+
 def test_registered_tools_call_service() -> None:
     mcp = RecordingMcp()
     adapter = FakeDwfAdapter(
