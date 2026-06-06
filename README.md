@@ -2,13 +2,15 @@
 
 Python MCP server for Digilent Analog Discovery 2 and Analog Discovery 3.
 
-This project exposes a small, read-only first tool surface for local MCP clients:
+This project exposes a small, read-only Stage 1 tool surface for local MCP clients:
 
 - Detect the installed Digilent WaveForms SDK version.
 - List connected WaveForms-compatible devices.
 - Read one analog input voltage sample from channel 1 or 2.
 
 V1 intentionally avoids tools that drive hardware outputs such as Wavegen, power supplies, and digital output.
+Analog waveform capture is currently demo-only in the fake backend; the real WaveForms
+backend does not implement capture yet.
 
 ## Requirements
 
@@ -46,7 +48,9 @@ Use the fake backend to test MCP client wiring when no Analog Discovery device i
 AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
 ```
 
-The fake backend is deterministic and for demos only. It reports one fake Analog Discovery 3 device and fixed voltage readings for channels 1 and 2.
+The fake backend is deterministic and for demos only. It reports one fake Analog Discovery 3 device,
+fixed voltage readings for channels 1 and 2, and simulated waveform capture payloads for client
+prototyping.
 
 ## MCP Client Configuration
 
@@ -101,15 +105,21 @@ Inputs:
 - `device_index`: optional zero-based device index
 - `serial_number`: optional device serial number
 
+## Experimental Fake Backend Tools
+
+These tools are available through MCP, but they are currently useful only with
+`AD_MCP_DWF_BACKEND=fake`. The real WaveForms backend returns a clear "not implemented" error
+until hardware-backed capture is added.
+
 ### `get_analog_capture_limits`
 
-Returns analog waveform capture limits for the selected device.
+Returns simulated analog waveform capture limits for the selected fake device.
 
 The fake backend reports AD3-like limits: 32,768 samples per channel and 65,536 total returned samples.
 
 ### `capture_analog_waveform`
 
-Captures analog input waveform samples.
+Returns deterministic simulated analog input waveform samples.
 
 Inputs:
 

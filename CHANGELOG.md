@@ -3,8 +3,8 @@
 ## Unreleased
 
 - Refactor adapter protocol and shared models into separate modules.
-- Add fake-backed analog waveform capture tools.
-- Add analog capture limit reporting.
+- Add experimental fake-backed analog waveform capture tools.
+- Add fake analog capture limit reporting.
 - Add deterministic fake backend for MCP demos without hardware.
 - Add `AD_MCP_DWF_BACKEND` backend selection.
 - Document fake backend usage.
@@ -14,4 +14,4 @@
 - Add initial MCP server for Analog Discovery 2/3.
 - Add WaveForms SDK adapter with lazy loading.
 - Add tools for SDK version, device listing, and analog voltage reads.
-- Add tests, CI, packaging, and public repository docs.
+- Add tests, packaging, and public repository docs.
