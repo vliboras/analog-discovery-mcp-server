@@ -79,3 +79,32 @@ def test_fake_adapter_captures_deterministic_waveform() -> None:
     assert result.data["channels"] == [1, 2]
     assert result.data["samples"]["1"] == [0.0, 0.124675, 0.247404, 0.366273]
     assert result.data["samples"]["2"] == [0.5, 0.496099, 0.484456, 0.465254]
+    assert result.data["valid_sample_count"] == 4
+    assert result.data["lost_sample_count"] == 0
+
+
+def test_fake_adapter_measures_core_stats() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    result = service.measure_analog_waveform(channel=2, sample_count=1)
+
+    assert result.ok is True
+    assert result.data is not None
+    assert "samples" not in result.data
+    assert result.data["min_voltage"] == 0.5
+    assert result.data["max_voltage"] == 0.5
+    assert result.data["mean_voltage"] == 0.5
+    assert result.data["rms_voltage"] == 0.5
+    assert result.data["peak_to_peak_voltage"] == 0.0
+
+
+def test_fake_adapter_reports_analog_input_status() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    result = service.get_analog_input_status()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["channel_count"] == 2
+    assert result.data["current_frequency_hz"] == 1000.0
+    assert result.data["channel_ranges"] == {"1": 5.0, "2": 5.0}

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Implement Stage 2 scope usability tools.
+- Add analog edge trigger options to `capture_analog_waveform`.
+- Add capture metadata for trigger state, sample validity, lost/corrupt counts,
+  and WaveForms status time.
+- Add `measure_analog_waveform` for core voltage statistics.
+- Add `get_analog_input_status` for AnalogIn capability and status metadata.
 - Complete Stage 1 public read/capture alpha.
 - Implement real WaveForms-backed analog waveform capture with bounded polling,
   actual sample rate reporting, and per-channel sample payloads.

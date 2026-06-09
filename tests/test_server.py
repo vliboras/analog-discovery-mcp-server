@@ -41,8 +41,10 @@ def test_registers_expected_tools() -> None:
     assert set(mcp.tools) == {
         "capture_analog_waveform",
         "get_analog_capture_limits",
+        "get_analog_input_status",
         "get_waveforms_version",
         "list_devices",
+        "measure_analog_waveform",
         "read_analog_voltage",
     }
 
@@ -74,6 +76,8 @@ def test_registered_tools_call_service() -> None:
     version = mcp.tools["get_waveforms_version"]()
     devices = mcp.tools["list_devices"]()
     voltage = mcp.tools["read_analog_voltage"](channel=1)
+    measurement = mcp.tools["measure_analog_waveform"](channel=1, sample_count=4)
+    status = mcp.tools["get_analog_input_status"]()
 
     assert version == {"ok": True, "data": {"version": "3.24.3"}}
     assert devices == {
@@ -92,6 +96,12 @@ def test_registered_tools_call_service() -> None:
     assert isinstance(voltage, dict)
     assert voltage["ok"] is True
     assert voltage["data"]["voltage"] == 0.75
+    assert isinstance(measurement, dict)
+    assert measurement["ok"] is True
+    assert measurement["data"]["mean_voltage"] == 1.0
+    assert isinstance(status, dict)
+    assert status["ok"] is True
+    assert status["data"]["channel_count"] == 2
 
 
 def test_tool_signatures_are_simple_for_mcp_schema() -> None:
@@ -104,3 +114,8 @@ def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     assert annotations["channel"] is int
     assert annotations["device_index"] == int | None
     assert annotations["serial_number"] == str | None
+
+    capture_annotations = get_type_hints(mcp.tools["capture_analog_waveform"])
+    assert capture_annotations["trigger_enabled"] is bool
+    assert capture_annotations["trigger_channel"] == int | None
+    assert capture_annotations["trigger_edge"] is str

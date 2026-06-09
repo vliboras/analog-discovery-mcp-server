@@ -209,7 +209,96 @@ def test_capture_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
     assert result.data["sample_count"] == 1000
     assert result.data["channels"] == [1]
     assert len(result.data["samples"]["1"]) == 1000
-    assert adapter.capture_calls == [(0, [0], 1000.0, 1000)]
+    assert result.data["triggered"] is False
+    assert adapter.capture_calls == [(0, [0], 1000.0, 1000, None)]
+
+
+def test_capture_passes_normalized_trigger_config(sample_devices: list[DeviceInfo]) -> None:
+    adapter = FakeDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    result = service.capture_analog_waveform(
+        channels=[1],
+        sample_count=10,
+        trigger_enabled=True,
+        trigger_level_v=0.5,
+        trigger_edge="RISING",
+    )
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["triggered"] is True
+    assert result.data["trigger"] == {
+        "channel": 1,
+        "level_v": 0.5,
+        "edge": "rising",
+        "hysteresis_v": 0.05,
+        "auto_timeout_seconds": 1.0,
+        "position_seconds": 0.005,
+    }
+    assert adapter.capture_calls[0][4] is not None
+
+
+def test_capture_rejects_invalid_trigger_edge(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(trigger_enabled=True, trigger_edge="both")
+
+    assert result.ok is False
+    assert result.error == "trigger_edge must be 'rising' or 'falling'"
+
+
+def test_capture_rejects_trigger_channel_outside_capture(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(
+        channels=[1],
+        trigger_enabled=True,
+        trigger_channel=2,
+    )
+
+    assert result.ok is False
+    assert result.error == "trigger_channel must be included in channels"
+
+
+def test_capture_rejects_invalid_trigger_hysteresis(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(
+        trigger_enabled=True,
+        trigger_hysteresis_v=0,
+    )
+
+    assert result.ok is False
+    assert result.error == "trigger_hysteresis_v must be positive"
+
+
+def test_capture_rejects_invalid_trigger_timeout(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(
+        trigger_enabled=True,
+        trigger_auto_timeout_seconds=0,
+    )
+
+    assert result.ok is False
+    assert result.error == "trigger_auto_timeout_seconds must be positive"
+
+
+def test_capture_rejects_invalid_trigger_position(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.capture_analog_waveform(
+        trigger_enabled=True,
+        sample_count=10,
+        sample_rate_hz=1000.0,
+        trigger_position_seconds=1.0,
+    )
+
+    assert result.ok is False
+    assert result.error == "trigger_position_seconds must be between 0 and 0.01"
 
 
 def test_capture_rejects_empty_channels(sample_devices: list[DeviceInfo]) -> None:
@@ -275,3 +364,36 @@ def test_capture_rejects_excessive_total_samples(sample_devices: list[DeviceInfo
     assert result.ok is False
     assert result.error == "total returned samples must be at most 8"
 
+
+def test_measure_analog_waveform_returns_core_stats_without_samples(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.measure_analog_waveform(channel=1, sample_count=4)
+
+    assert result.ok is True
+    assert result.data is not None
+    assert "samples" not in result.data
+    assert result.data["channel"] == 1
+    assert result.data["min_voltage"] == 1.0
+    assert result.data["max_voltage"] == 1.0
+    assert result.data["mean_voltage"] == 1.0
+    assert result.data["rms_voltage"] == 1.0
+    assert result.data["peak_to_peak_voltage"] == 0.0
+
+
+def test_get_analog_input_status_returns_status_shape(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.get_analog_input_status()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["channel_count"] == 2
+    assert result.data["frequency_min_hz"] == 1.0
+    assert result.data["buffer_size_max"] == 32_768
+    assert result.data["channel_ranges"] == {"1": 5.0, "2": 5.0}
+    assert result.data["device"]["serial_number"] == "SN:AD2"

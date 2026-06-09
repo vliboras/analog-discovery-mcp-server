@@ -7,6 +7,9 @@ from analog_discovery_mcp.dwf import DwfError
 from analog_discovery_mcp.models import (
     AnalogCapture,
     AnalogCaptureLimits,
+    AnalogInputStatus,
+    AnalogStatusTime,
+    AnalogTriggerConfig,
     DeviceInfo,
 )
 
@@ -28,7 +31,9 @@ class FakeDwfAdapter(DwfAdapter):
         self.fail_list = fail_list
         self.fail_read = fail_read
         self.read_calls: list[tuple[int, int]] = []
-        self.capture_calls: list[tuple[int, list[int], float, int]] = []
+        self.capture_calls: list[
+            tuple[int, list[int], float, int, AnalogTriggerConfig | None]
+        ] = []
 
     def get_version(self) -> str:
         if self.fail_version:
@@ -61,8 +66,11 @@ class FakeDwfAdapter(DwfAdapter):
         channel_indices: list[int],
         sample_rate_hz: float,
         sample_count: int,
+        trigger_config: AnalogTriggerConfig | None = None,
     ) -> AnalogCapture:
-        self.capture_calls.append((device_index, channel_indices, sample_rate_hz, sample_count))
+        self.capture_calls.append(
+            (device_index, channel_indices, sample_rate_hz, sample_count, trigger_config)
+        )
         return AnalogCapture(
             sample_rate_hz=sample_rate_hz,
             sample_count=sample_count,
@@ -71,6 +79,31 @@ class FakeDwfAdapter(DwfAdapter):
                 str(channel_index + 1): [float(channel_index + 1)] * sample_count
                 for channel_index in channel_indices
             },
+            triggered=trigger_config is not None,
+            auto_triggered=False if trigger_config is not None else None,
+            valid_sample_count=sample_count,
+            lost_sample_count=0,
+            corrupt_sample_count=0,
+            status_time=AnalogStatusTime(
+                seconds_utc=0,
+                tick=0,
+                ticks_per_second=1_000_000,
+            ),
+            trigger=trigger_config,
+        )
+
+    def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
+        return AnalogInputStatus(
+            channel_count=2,
+            frequency_min_hz=1.0,
+            frequency_max_hz=100_000_000.0,
+            current_frequency_hz=1000.0,
+            buffer_size_min=1,
+            buffer_size_max=32_768,
+            current_buffer_size=1000,
+            channel_ranges={"1": 5.0, "2": 5.0},
+            channel_offsets={"1": 0.0, "2": 0.0},
+            state=None,
         )
 
 

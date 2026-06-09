@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from dataclasses import asdict
 
 from analog_discovery_mcp.adapters import DwfAdapter
 from analog_discovery_mcp.dwf import DwfError
-from analog_discovery_mcp.models import AnalogCaptureLimits, DeviceInfo, ToolResult
+from analog_discovery_mcp.models import (
+    AnalogCapture,
+    AnalogCaptureLimits,
+    AnalogTriggerConfig,
+    DeviceInfo,
+    ToolResult,
+)
 
 ENV_DEVICE_INDEX = "AD_MCP_DEVICE_INDEX"
 ENV_DEVICE_SERIAL = "AD_MCP_DEVICE_SERIAL"
@@ -85,6 +92,13 @@ class AnalogDiscoveryService:
         sample_count: int = DEFAULT_CAPTURE_SAMPLE_COUNT,
         device_index: int | None = None,
         serial_number: str | None = None,
+        trigger_enabled: bool = False,
+        trigger_channel: int | None = None,
+        trigger_level_v: float = 0.0,
+        trigger_edge: str = "rising",
+        trigger_hysteresis_v: float = 0.05,
+        trigger_auto_timeout_seconds: float = 1.0,
+        trigger_position_seconds: float | None = None,
     ) -> ToolResult:
         requested_channels = DEFAULT_CAPTURE_CHANNELS if channels is None else channels
 
@@ -97,21 +111,92 @@ class AnalogDiscoveryService:
                 sample_count,
                 limits,
             )
+            trigger_config = _build_trigger_config(
+                trigger_enabled=trigger_enabled,
+                trigger_channel=trigger_channel,
+                requested_channels=requested_channels,
+                sample_rate_hz=sample_rate_hz,
+                sample_count=sample_count,
+                limits=limits,
+                trigger_level_v=trigger_level_v,
+                trigger_edge=trigger_edge,
+                trigger_hysteresis_v=trigger_hysteresis_v,
+                trigger_auto_timeout_seconds=trigger_auto_timeout_seconds,
+                trigger_position_seconds=trigger_position_seconds,
+            )
             capture = self._adapter.capture_analog_waveform(
                 device_index=selected_device.index,
                 channel_indices=[channel - 1 for channel in requested_channels],
                 sample_rate_hz=sample_rate_hz,
                 sample_count=sample_count,
+                trigger_config=trigger_config,
             )
             return ToolResult(
                 ok=True,
+                data=_capture_payload(capture, sample_rate_hz, selected_device),
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def measure_analog_waveform(
+        self,
+        channel: int,
+        sample_rate_hz: float = DEFAULT_CAPTURE_SAMPLE_RATE_HZ,
+        sample_count: int = DEFAULT_CAPTURE_SAMPLE_COUNT,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+        trigger_enabled: bool = False,
+        trigger_channel: int | None = None,
+        trigger_level_v: float = 0.0,
+        trigger_edge: str = "rising",
+        trigger_hysteresis_v: float = 0.05,
+        trigger_auto_timeout_seconds: float = 1.0,
+        trigger_position_seconds: float | None = None,
+    ) -> ToolResult:
+        result = self.capture_analog_waveform(
+            channels=[channel],
+            sample_rate_hz=sample_rate_hz,
+            sample_count=sample_count,
+            device_index=device_index,
+            serial_number=serial_number,
+            trigger_enabled=trigger_enabled,
+            trigger_channel=trigger_channel,
+            trigger_level_v=trigger_level_v,
+            trigger_edge=trigger_edge,
+            trigger_hysteresis_v=trigger_hysteresis_v,
+            trigger_auto_timeout_seconds=trigger_auto_timeout_seconds,
+            trigger_position_seconds=trigger_position_seconds,
+        )
+        if not result.ok or result.data is None:
+            return result
+
+        samples = result.data["samples"][str(channel)]
+        stats = _measure_samples(samples)
+        payload = {
+            key: value
+            for key, value in result.data.items()
+            if key != "samples"
+        }
+        payload.update(
+            {
+                "channel": channel,
+                **stats,
+            }
+        )
+        return ToolResult(ok=True, data=payload)
+
+    def get_analog_input_status(
+        self,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            status = self._adapter.get_analog_input_status(selected_device.index)
+            return ToolResult(
+                ok=True,
                 data={
-                    "requested_sample_rate_hz": sample_rate_hz,
-                    "actual_sample_rate_hz": capture.sample_rate_hz,
-                    "sample_count": capture.sample_count,
-                    "duration_seconds": capture.sample_count / capture.sample_rate_hz,
-                    "channels": capture.channels,
-                    "samples": capture.samples,
+                    **asdict(status),
                     "device": asdict(selected_device),
                 },
             )
@@ -205,3 +290,100 @@ def _validate_capture_request(
         raise ValueError(
             f"total returned samples must be at most {limits.max_total_returned_samples}"
         )
+
+
+def _build_trigger_config(
+    *,
+    trigger_enabled: bool,
+    trigger_channel: int | None,
+    requested_channels: list[int],
+    sample_rate_hz: float,
+    sample_count: int,
+    limits: AnalogCaptureLimits,
+    trigger_level_v: float,
+    trigger_edge: str,
+    trigger_hysteresis_v: float,
+    trigger_auto_timeout_seconds: float,
+    trigger_position_seconds: float | None,
+) -> AnalogTriggerConfig | None:
+    if not trigger_enabled:
+        return None
+
+    channel = requested_channels[0] if trigger_channel is None else trigger_channel
+    if channel not in limits.supported_channels:
+        raise ValueError(f"trigger_channel must be one of {limits.supported_channels}")
+    if channel not in requested_channels:
+        raise ValueError("trigger_channel must be included in channels")
+
+    edge = trigger_edge.strip().lower()
+    if edge not in ("rising", "falling"):
+        raise ValueError("trigger_edge must be 'rising' or 'falling'")
+
+    if not math.isfinite(trigger_level_v):
+        raise ValueError("trigger_level_v must be finite")
+    if not math.isfinite(trigger_hysteresis_v) or trigger_hysteresis_v <= 0:
+        raise ValueError("trigger_hysteresis_v must be positive")
+    if not math.isfinite(trigger_auto_timeout_seconds) or trigger_auto_timeout_seconds <= 0:
+        raise ValueError("trigger_auto_timeout_seconds must be positive")
+
+    duration_seconds = sample_count / sample_rate_hz
+    position_seconds = (
+        duration_seconds / 2 if trigger_position_seconds is None else trigger_position_seconds
+    )
+    if (
+        not math.isfinite(position_seconds)
+        or position_seconds < 0
+        or position_seconds > duration_seconds
+    ):
+        raise ValueError(
+            f"trigger_position_seconds must be between 0 and {duration_seconds}"
+        )
+
+    return AnalogTriggerConfig(
+        channel=channel,
+        level_v=trigger_level_v,
+        edge=edge,
+        hysteresis_v=trigger_hysteresis_v,
+        auto_timeout_seconds=trigger_auto_timeout_seconds,
+        position_seconds=position_seconds,
+    )
+
+
+def _capture_payload(
+    capture: AnalogCapture,
+    requested_sample_rate_hz: float,
+    selected_device: DeviceInfo,
+) -> dict[str, object]:
+    return {
+        "requested_sample_rate_hz": requested_sample_rate_hz,
+        "actual_sample_rate_hz": capture.sample_rate_hz,
+        "sample_count": capture.sample_count,
+        "duration_seconds": capture.sample_count / capture.sample_rate_hz,
+        "channels": capture.channels,
+        "samples": capture.samples,
+        "triggered": capture.triggered,
+        "auto_triggered": capture.auto_triggered,
+        "valid_sample_count": capture.valid_sample_count,
+        "lost_sample_count": capture.lost_sample_count,
+        "corrupt_sample_count": capture.corrupt_sample_count,
+        "status_time": asdict(capture.status_time) if capture.status_time else None,
+        "trigger": asdict(capture.trigger) if capture.trigger else None,
+        "device": asdict(selected_device),
+    }
+
+
+def _measure_samples(samples: list[float]) -> dict[str, float]:
+    if not samples:
+        raise ValueError("samples must not be empty")
+
+    mean = sum(samples) / len(samples)
+    rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples))
+    min_voltage = min(samples)
+    max_voltage = max(samples)
+    return {
+        "min_voltage": min_voltage,
+        "max_voltage": max_voltage,
+        "mean_voltage": mean,
+        "rms_voltage": rms,
+        "peak_to_peak_voltage": max_voltage - min_voltage,
+    }

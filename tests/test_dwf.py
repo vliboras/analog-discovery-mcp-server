@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 
 from analog_discovery_mcp.dwf import CtypesDwfAdapter, DwfError
+from analog_discovery_mcp.models import AnalogTriggerConfig
 
 
 class FakeWaveFormsSdk:
@@ -100,6 +101,99 @@ class FakeWaveFormsSdk:
         self._set_value(sample_rate_hz, 999.5)
         return self._result("FDwfAnalogInFrequencyGet")
 
+    def FDwfAnalogInBufferSizeGet(self, handle: object, sample_count: object) -> int:
+        self._record("FDwfAnalogInBufferSizeGet", handle)
+        self._set_value(sample_count, 4096)
+        return self._result("FDwfAnalogInBufferSizeGet")
+
+    def FDwfAnalogInChannelRangeGet(
+        self,
+        handle: object,
+        channel_index: object,
+        channel_range: object,
+    ) -> int:
+        self._record("FDwfAnalogInChannelRangeGet", handle, channel_index)
+        self._set_value(channel_range, 5.0)
+        return self._result("FDwfAnalogInChannelRangeGet")
+
+    def FDwfAnalogInChannelOffsetGet(
+        self,
+        handle: object,
+        channel_index: object,
+        channel_offset: object,
+    ) -> int:
+        self._record("FDwfAnalogInChannelOffsetGet", handle, channel_index)
+        self._set_value(channel_offset, 0.0)
+        return self._result("FDwfAnalogInChannelOffsetGet")
+
+    def FDwfAnalogInTriggerSourceSet(self, handle: object, source: object) -> int:
+        self._record("FDwfAnalogInTriggerSourceSet", handle, source)
+        return self._result("FDwfAnalogInTriggerSourceSet")
+
+    def FDwfAnalogInTriggerTypeSet(self, handle: object, trigger_type: object) -> int:
+        self._record("FDwfAnalogInTriggerTypeSet", handle, trigger_type)
+        return self._result("FDwfAnalogInTriggerTypeSet")
+
+    def FDwfAnalogInTriggerChannelSet(self, handle: object, channel_index: object) -> int:
+        self._record("FDwfAnalogInTriggerChannelSet", handle, channel_index)
+        return self._result("FDwfAnalogInTriggerChannelSet")
+
+    def FDwfAnalogInTriggerLevelSet(self, handle: object, level: object) -> int:
+        self._record("FDwfAnalogInTriggerLevelSet", handle, level)
+        return self._result("FDwfAnalogInTriggerLevelSet")
+
+    def FDwfAnalogInTriggerHysteresisSet(self, handle: object, hysteresis: object) -> int:
+        self._record("FDwfAnalogInTriggerHysteresisSet", handle, hysteresis)
+        return self._result("FDwfAnalogInTriggerHysteresisSet")
+
+    def FDwfAnalogInTriggerConditionSet(self, handle: object, condition: object) -> int:
+        self._record("FDwfAnalogInTriggerConditionSet", handle, condition)
+        return self._result("FDwfAnalogInTriggerConditionSet")
+
+    def FDwfAnalogInTriggerAutoTimeoutSet(self, handle: object, timeout: object) -> int:
+        self._record("FDwfAnalogInTriggerAutoTimeoutSet", handle, timeout)
+        return self._result("FDwfAnalogInTriggerAutoTimeoutSet")
+
+    def FDwfAnalogInTriggerPositionSet(self, handle: object, position: object) -> int:
+        self._record("FDwfAnalogInTriggerPositionSet", handle, position)
+        return self._result("FDwfAnalogInTriggerPositionSet")
+
+    def FDwfAnalogInStatusSamplesValid(self, handle: object, sample_count: object) -> int:
+        self._record("FDwfAnalogInStatusSamplesValid", handle)
+        self._set_value(sample_count, 4)
+        return self._result("FDwfAnalogInStatusSamplesValid")
+
+    def FDwfAnalogInStatusAutoTriggered(self, handle: object, auto_triggered: object) -> int:
+        self._record("FDwfAnalogInStatusAutoTriggered", handle)
+        self._set_value(auto_triggered, 0)
+        return self._result("FDwfAnalogInStatusAutoTriggered")
+
+    def FDwfAnalogInStatusRecord(
+        self,
+        handle: object,
+        data_available: object,
+        data_lost: object,
+        data_corrupt: object,
+    ) -> int:
+        self._record("FDwfAnalogInStatusRecord", handle)
+        self._set_value(data_available, 4)
+        self._set_value(data_lost, 0)
+        self._set_value(data_corrupt, 0)
+        return self._result("FDwfAnalogInStatusRecord")
+
+    def FDwfAnalogInStatusTime(
+        self,
+        handle: object,
+        seconds_utc: object,
+        tick: object,
+        ticks_per_second: object,
+    ) -> int:
+        self._record("FDwfAnalogInStatusTime", handle)
+        self._set_value(seconds_utc, 123)
+        self._set_value(tick, 456)
+        self._set_value(ticks_per_second, 1_000_000)
+        return self._result("FDwfAnalogInStatusTime")
+
     def FDwfAnalogInStatusData(
         self,
         handle: object,
@@ -182,9 +276,14 @@ def test_real_capture_configures_requested_channels_and_returns_samples() -> Non
         "FDwfAnalogInAcquisitionModeSet",
         "FDwfAnalogInFrequencySet",
         "FDwfAnalogInBufferSizeSet",
+        "FDwfAnalogInTriggerSourceSet",
         "FDwfAnalogInConfigure",
         "FDwfAnalogInStatus",
         "FDwfAnalogInFrequencyGet",
+        "FDwfAnalogInStatusSamplesValid",
+        "FDwfAnalogInStatusAutoTriggered",
+        "FDwfAnalogInStatusRecord",
+        "FDwfAnalogInStatusTime",
         "FDwfAnalogInStatusData",
         "FDwfAnalogInStatusData",
         "FDwfDeviceClose",
@@ -204,6 +303,53 @@ def test_real_capture_closes_device_when_sdk_call_fails() -> None:
             sample_count=4,
         )
 
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_capture_configures_analog_edge_trigger() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    capture = adapter.capture_analog_waveform(
+        device_index=0,
+        channel_indices=[0],
+        sample_rate_hz=1000.0,
+        sample_count=4,
+        trigger_config=AnalogTriggerConfig(
+            channel=1,
+            level_v=0.5,
+            edge="rising",
+            hysteresis_v=0.05,
+            auto_timeout_seconds=1.0,
+            position_seconds=0.002,
+        ),
+    )
+
+    assert capture.triggered is True
+    assert capture.auto_triggered is False
+    assert capture.valid_sample_count == 4
+    assert capture.lost_sample_count == 0
+    assert capture.corrupt_sample_count == 0
+    assert capture.status_time is not None
+    assert "FDwfAnalogInTriggerSourceSet" in _call_names(sdk)
+    assert "FDwfAnalogInTriggerConditionSet" in _call_names(sdk)
+
+
+def test_real_analog_input_status_returns_capabilities() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.get_analog_input_status(device_index=0)
+
+    assert status.channel_count == 2
+    assert status.frequency_min_hz == 1.0
+    assert status.frequency_max_hz == 100_000_000.0
+    assert status.current_frequency_hz == 999.5
+    assert status.buffer_size_min == 1
+    assert status.buffer_size_max == 32_768
+    assert status.current_buffer_size == 4096
+    assert status.channel_ranges == {"1": 5.0, "2": 5.0}
+    assert status.channel_offsets == {"1": 0.0, "2": 0.0}
     assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 

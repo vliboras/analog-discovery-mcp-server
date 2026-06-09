@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from analog_discovery_mcp.models import AnalogCapture, AnalogCaptureLimits, DeviceInfo
+from analog_discovery_mcp.models import (
+    AnalogCapture,
+    AnalogCaptureLimits,
+    AnalogInputStatus,
+    AnalogTriggerConfig,
+    DeviceInfo,
+)
 
 
 class DwfAdapter(Protocol):
@@ -24,5 +30,9 @@ class DwfAdapter(Protocol):
         channel_indices: list[int],
         sample_rate_hz: float,
         sample_count: int,
+        trigger_config: AnalogTriggerConfig | None = None,
     ) -> AnalogCapture:
         """Capture analog input waveform samples."""
+
+    def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
+        """Return analog input capability and current status metadata."""

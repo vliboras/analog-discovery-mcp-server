@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import math
 
-from analog_discovery_mcp.models import AnalogCapture, AnalogCaptureLimits, DeviceInfo
+from analog_discovery_mcp.models import (
+    AnalogCapture,
+    AnalogCaptureLimits,
+    AnalogInputStatus,
+    AnalogStatusTime,
+    AnalogTriggerConfig,
+    DeviceInfo,
+)
 
 FAKE_DEFAULT_SAMPLE_RATE_HZ = 1000.0
 FAKE_DEFAULT_SAMPLE_COUNT = 1000
@@ -52,6 +59,7 @@ class FakeDwfAdapter:
         channel_indices: list[int],
         sample_rate_hz: float,
         sample_count: int,
+        trigger_config: AnalogTriggerConfig | None = None,
     ) -> AnalogCapture:
         self._validate_device_index(device_index)
         samples = {
@@ -63,6 +71,32 @@ class FakeDwfAdapter:
             sample_count=sample_count,
             channels=[channel_index + 1 for channel_index in channel_indices],
             samples=samples,
+            triggered=trigger_config is not None,
+            auto_triggered=False if trigger_config is not None else None,
+            valid_sample_count=sample_count,
+            lost_sample_count=0,
+            corrupt_sample_count=0,
+            status_time=AnalogStatusTime(
+                seconds_utc=0,
+                tick=0,
+                ticks_per_second=1_000_000,
+            ),
+            trigger=trigger_config,
+        )
+
+    def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
+        self._validate_device_index(device_index)
+        return AnalogInputStatus(
+            channel_count=2,
+            frequency_min_hz=1.0,
+            frequency_max_hz=100_000_000.0,
+            current_frequency_hz=FAKE_DEFAULT_SAMPLE_RATE_HZ,
+            buffer_size_min=1,
+            buffer_size_max=FAKE_MAX_SAMPLE_COUNT_PER_CHANNEL,
+            current_buffer_size=FAKE_DEFAULT_SAMPLE_COUNT,
+            channel_ranges={"1": 5.0, "2": 5.0},
+            channel_offsets={"1": 0.0, "2": 0.0},
+            state=None,
         )
 
     def _validate_device_index(self, device_index: int) -> None:

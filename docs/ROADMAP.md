@@ -16,10 +16,13 @@ Implemented MCP tools:
 - `read_analog_voltage`
 - `get_analog_capture_limits`
 - `capture_analog_waveform`
+- `measure_analog_waveform`
+- `get_analog_input_status`
 
-All five tools work against the fake backend. The real WaveForms backend supports
+All tools work against the fake backend. The real WaveForms backend supports
 version detection, device listing, analog voltage reads, analog capture limit
-reporting, and small analog waveform captures.
+reporting, small analog waveform captures with analog edge triggers, core
+waveform measurements, and analog input status reporting.
 
 ## Development Stages
 
@@ -34,7 +37,7 @@ workflows.
 - Preserve fake backend behavior for demos and CI.
 - Add opt-in hardware tests for real capture behind `AD_MCP_HARDWARE_TESTS=1`.
 
-### Stage 2: Scope Usability
+### Stage 2: Scope Usability - Implemented
 
 Ready state: the MCP server is useful as a basic oscilloscope interface, not
 only a raw sample fetcher.
@@ -42,7 +45,7 @@ only a raw sample fetcher.
 - Extend analog capture with optional trigger configuration, acquisition
   metadata, and actual sample rate reporting.
 - Add measurement-oriented tools:
-  - `measure_analog_channel`
+  - `measure_analog_waveform`
   - `get_analog_input_status`
 - Keep APIs simple and JSON-friendly.
 - Avoid long-lived hidden session state unless WaveForms behavior makes it

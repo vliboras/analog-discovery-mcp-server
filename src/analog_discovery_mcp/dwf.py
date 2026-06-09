@@ -8,14 +8,27 @@ from ctypes import (
     c_byte,
     c_double,
     c_int,
+    c_uint,
     create_string_buffer,
 )
 from typing import Any, cast
 
-from analog_discovery_mcp.models import AnalogCapture, AnalogCaptureLimits, DeviceInfo
+from analog_discovery_mcp.models import (
+    AnalogCapture,
+    AnalogCaptureLimits,
+    AnalogInputStatus,
+    AnalogStatusTime,
+    AnalogTriggerConfig,
+    DeviceInfo,
+)
 
 ACQMODE_SINGLE = 0
 DWF_STATE_DONE = 2
+TRIGSRC_NONE = 0
+TRIGSRC_DETECTOR_ANALOG_IN = 2
+TRIGTYPE_EDGE = 0
+TRIGGER_SLOPE_RISE = 0
+TRIGGER_SLOPE_FALL = 1
 DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
 DEFAULT_CAPTURE_SAMPLE_COUNT = 1000
 MAX_TOTAL_RETURNED_SAMPLES = 65_536
@@ -161,6 +174,7 @@ class CtypesDwfAdapter:
         channel_indices: list[int],
         sample_rate_hz: float,
         sample_count: int,
+        trigger_config: AnalogTriggerConfig | None = None,
     ) -> AnalogCapture:
         handle = self._open_device(device_index)
 
@@ -182,11 +196,13 @@ class CtypesDwfAdapter:
             )
             self._require_ok(self._dwf.FDwfAnalogInFrequencySet(handle, c_double(sample_rate_hz)))
             self._require_ok(self._dwf.FDwfAnalogInBufferSizeSet(handle, c_int(sample_count)))
+            self._configure_analog_trigger(handle, trigger_config)
             self._require_ok(self._dwf.FDwfAnalogInConfigure(handle, c_int(1), c_int(1)))
-            self._wait_for_analog_capture(handle)
+            self._wait_for_analog_capture(handle, sample_count, sample_rate_hz, trigger_config)
 
             actual_sample_rate = c_double()
             self._require_ok(self._dwf.FDwfAnalogInFrequencyGet(handle, byref(actual_sample_rate)))
+            metadata = self._read_analog_capture_metadata(handle, trigger_config)
 
             samples: dict[str, list[float]] = {}
             for channel_index in channel_indices:
@@ -206,6 +222,83 @@ class CtypesDwfAdapter:
                 sample_count=sample_count,
                 channels=[channel_index + 1 for channel_index in channel_indices],
                 samples=samples,
+                triggered=metadata["triggered"],
+                auto_triggered=metadata["auto_triggered"],
+                valid_sample_count=metadata["valid_sample_count"],
+                lost_sample_count=metadata["lost_sample_count"],
+                corrupt_sample_count=metadata["corrupt_sample_count"],
+                status_time=metadata["status_time"],
+                trigger=trigger_config,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
+        handle = self._open_device(device_index)
+
+        try:
+            channel_count = c_int()
+            frequency_min = c_double()
+            frequency_max = c_double()
+            current_frequency = c_double()
+            buffer_min = c_int()
+            buffer_max = c_int()
+            current_buffer = c_int()
+            state = c_byte()
+
+            self._require_ok(self._dwf.FDwfAnalogInChannelCount(handle, byref(channel_count)))
+            self._require_ok(
+                self._dwf.FDwfAnalogInFrequencyInfo(
+                    handle,
+                    byref(frequency_min),
+                    byref(frequency_max),
+                )
+            )
+            self._require_ok(self._dwf.FDwfAnalogInFrequencyGet(handle, byref(current_frequency)))
+            self._require_ok(
+                self._dwf.FDwfAnalogInBufferSizeInfo(
+                    handle,
+                    byref(buffer_min),
+                    byref(buffer_max),
+                )
+            )
+            self._require_ok(self._dwf.FDwfAnalogInBufferSizeGet(handle, byref(current_buffer)))
+            self._require_ok(self._dwf.FDwfAnalogInStatus(handle, c_int(0), byref(state)))
+
+            channel_ranges: dict[str, float] = {}
+            channel_offsets: dict[str, float] = {}
+            for channel_index in range(max(0, channel_count.value)):
+                channel_key = str(channel_index + 1)
+                channel_range = c_double()
+                channel_offset = c_double()
+                self._require_ok(
+                    self._dwf.FDwfAnalogInChannelRangeGet(
+                        handle,
+                        c_int(channel_index),
+                        byref(channel_range),
+                    )
+                )
+                self._require_ok(
+                    self._dwf.FDwfAnalogInChannelOffsetGet(
+                        handle,
+                        c_int(channel_index),
+                        byref(channel_offset),
+                    )
+                )
+                channel_ranges[channel_key] = float(channel_range.value)
+                channel_offsets[channel_key] = float(channel_offset.value)
+
+            return AnalogInputStatus(
+                channel_count=max(0, channel_count.value),
+                frequency_min_hz=float(frequency_min.value),
+                frequency_max_hz=float(frequency_max.value),
+                current_frequency_hz=float(current_frequency.value),
+                buffer_size_min=buffer_min.value,
+                buffer_size_max=buffer_max.value,
+                current_buffer_size=current_buffer.value,
+                channel_ranges=channel_ranges,
+                channel_offsets=channel_offsets,
+                state=int(state.value),
             )
         finally:
             self._dwf.FDwfDeviceClose(handle)
@@ -217,12 +310,63 @@ class CtypesDwfAdapter:
             raise DeviceOpenError(self._last_error_message("Unable to open WaveForms device"))
         return handle
 
-    def _wait_for_analog_capture(self, handle: c_int) -> None:
-        deadline = time.monotonic() + getattr(
-            self,
-            "_capture_timeout_seconds",
-            ANALOG_CAPTURE_TIMEOUT_SECONDS,
+    def _configure_analog_trigger(
+        self,
+        handle: c_int,
+        trigger_config: AnalogTriggerConfig | None,
+    ) -> None:
+        if trigger_config is None:
+            self._require_ok(self._dwf.FDwfAnalogInTriggerSourceSet(handle, c_byte(TRIGSRC_NONE)))
+            return
+
+        slope = TRIGGER_SLOPE_RISE if trigger_config.edge == "rising" else TRIGGER_SLOPE_FALL
+        self._require_ok(
+            self._dwf.FDwfAnalogInTriggerSourceSet(handle, c_byte(TRIGSRC_DETECTOR_ANALOG_IN))
         )
+        self._require_ok(self._dwf.FDwfAnalogInTriggerTypeSet(handle, c_int(TRIGTYPE_EDGE)))
+        self._require_ok(
+            self._dwf.FDwfAnalogInTriggerChannelSet(handle, c_int(trigger_config.channel - 1))
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogInTriggerLevelSet(handle, c_double(trigger_config.level_v))
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogInTriggerHysteresisSet(
+                handle,
+                c_double(trigger_config.hysteresis_v),
+            )
+        )
+        self._require_ok(self._dwf.FDwfAnalogInTriggerConditionSet(handle, c_int(slope)))
+        self._require_ok(
+            self._dwf.FDwfAnalogInTriggerAutoTimeoutSet(
+                handle,
+                c_double(trigger_config.auto_timeout_seconds),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogInTriggerPositionSet(
+                handle,
+                c_double(trigger_config.position_seconds),
+            )
+        )
+
+    def _wait_for_analog_capture(
+        self,
+        handle: c_int,
+        sample_count: int,
+        sample_rate_hz: float,
+        trigger_config: AnalogTriggerConfig | None,
+    ) -> None:
+        capture_duration = sample_count / sample_rate_hz
+        trigger_wait = 0.0 if trigger_config is None else trigger_config.auto_timeout_seconds
+        if hasattr(self, "_capture_timeout_seconds"):
+            timeout_seconds = cast(float, self._capture_timeout_seconds)
+        else:
+            timeout_seconds = max(
+                ANALOG_CAPTURE_TIMEOUT_SECONDS,
+                trigger_wait + capture_duration + 1.0,
+            )
+        deadline = time.monotonic() + timeout_seconds
         status = c_byte()
 
         while True:
@@ -232,6 +376,53 @@ class CtypesDwfAdapter:
             if time.monotonic() >= deadline:
                 raise DwfError("analog waveform capture timed out")
             time.sleep(ANALOG_CAPTURE_POLL_INTERVAL_SECONDS)
+
+    def _read_analog_capture_metadata(
+        self,
+        handle: c_int,
+        trigger_config: AnalogTriggerConfig | None,
+    ) -> dict[str, Any]:
+        valid_samples = c_int()
+        auto_triggered = c_int()
+        data_available = c_int()
+        lost_samples = c_int()
+        corrupt_samples = c_int()
+        seconds_utc = c_uint()
+        tick = c_uint()
+        ticks_per_second = c_uint()
+
+        self._require_ok(self._dwf.FDwfAnalogInStatusSamplesValid(handle, byref(valid_samples)))
+        self._require_ok(self._dwf.FDwfAnalogInStatusAutoTriggered(handle, byref(auto_triggered)))
+        self._require_ok(
+            self._dwf.FDwfAnalogInStatusRecord(
+                handle,
+                byref(data_available),
+                byref(lost_samples),
+                byref(corrupt_samples),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogInStatusTime(
+                handle,
+                byref(seconds_utc),
+                byref(tick),
+                byref(ticks_per_second),
+            )
+        )
+
+        auto_triggered_value = bool(auto_triggered.value)
+        return {
+            "triggered": trigger_config is not None and not auto_triggered_value,
+            "auto_triggered": auto_triggered_value if trigger_config is not None else None,
+            "valid_sample_count": valid_samples.value,
+            "lost_sample_count": lost_samples.value,
+            "corrupt_sample_count": corrupt_samples.value,
+            "status_time": AnalogStatusTime(
+                seconds_utc=seconds_utc.value,
+                tick=tick.value,
+                ticks_per_second=ticks_per_second.value,
+            ),
+        }
 
     def _require_ok(self, result: int) -> None:
         if not result:
@@ -283,13 +474,18 @@ class LazyDwfAdapter:
         channel_indices: list[int],
         sample_rate_hz: float,
         sample_count: int,
+        trigger_config: AnalogTriggerConfig | None = None,
     ) -> AnalogCapture:
         return self._get_adapter().capture_analog_waveform(
             device_index,
             channel_indices,
             sample_rate_hz,
             sample_count,
+            trigger_config,
         )
+
+    def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
+        return self._get_adapter().get_analog_input_status(device_index)
 
     def _get_adapter(self) -> CtypesDwfAdapter:
         if self._adapter is None:

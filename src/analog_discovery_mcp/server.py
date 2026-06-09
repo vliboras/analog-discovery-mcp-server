@@ -70,6 +70,13 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
         sample_count: int = 1000,
         device_index: int | None = None,
         serial_number: str | None = None,
+        trigger_enabled: bool = False,
+        trigger_channel: int | None = None,
+        trigger_level_v: float = 0.0,
+        trigger_edge: str = "rising",
+        trigger_hysteresis_v: float = 0.05,
+        trigger_auto_timeout_seconds: float = 1.0,
+        trigger_position_seconds: float | None = None,
     ) -> dict[str, object]:
         """Capture analog input waveform samples from channel 1 and/or 2."""
 
@@ -77,6 +84,57 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
             channels=channels,
             sample_rate_hz=sample_rate_hz,
             sample_count=sample_count,
+            device_index=device_index,
+            serial_number=serial_number,
+            trigger_enabled=trigger_enabled,
+            trigger_channel=trigger_channel,
+            trigger_level_v=trigger_level_v,
+            trigger_edge=trigger_edge,
+            trigger_hysteresis_v=trigger_hysteresis_v,
+            trigger_auto_timeout_seconds=trigger_auto_timeout_seconds,
+            trigger_position_seconds=trigger_position_seconds,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def measure_analog_waveform(
+        channel: int,
+        sample_rate_hz: float = 1000.0,
+        sample_count: int = 1000,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+        trigger_enabled: bool = False,
+        trigger_channel: int | None = None,
+        trigger_level_v: float = 0.0,
+        trigger_edge: str = "rising",
+        trigger_hysteresis_v: float = 0.05,
+        trigger_auto_timeout_seconds: float = 1.0,
+        trigger_position_seconds: float | None = None,
+    ) -> dict[str, object]:
+        """Measure core voltage statistics from one analog waveform capture."""
+
+        return service.measure_analog_waveform(
+            channel=channel,
+            sample_rate_hz=sample_rate_hz,
+            sample_count=sample_count,
+            device_index=device_index,
+            serial_number=serial_number,
+            trigger_enabled=trigger_enabled,
+            trigger_channel=trigger_channel,
+            trigger_level_v=trigger_level_v,
+            trigger_edge=trigger_edge,
+            trigger_hysteresis_v=trigger_hysteresis_v,
+            trigger_auto_timeout_seconds=trigger_auto_timeout_seconds,
+            trigger_position_seconds=trigger_position_seconds,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def get_analog_input_status(
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Return analog input capability and current status metadata."""
+
+        return service.get_analog_input_status(
             device_index=device_index,
             serial_number=serial_number,
         ).model_dump(exclude_none=True)
