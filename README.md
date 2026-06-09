@@ -152,6 +152,8 @@ Hardware integration tests are skipped by default. Enable them explicitly:
 AD_MCP_HARDWARE_TESTS=1 uv run pytest -m hardware
 ```
 
+The staged development plan lives in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Safety
 
 This first version does not expose output-driving instruments. Reading voltage still opens and configures the selected WaveForms device as required by the SDK.
