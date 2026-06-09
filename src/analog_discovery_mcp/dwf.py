@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from ctypes import (
     CDLL,
     byref,
@@ -12,6 +13,14 @@ from ctypes import (
 from typing import Any, cast
 
 from analog_discovery_mcp.models import AnalogCapture, AnalogCaptureLimits, DeviceInfo
+
+ACQMODE_SINGLE = 0
+DWF_STATE_DONE = 2
+DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
+DEFAULT_CAPTURE_SAMPLE_COUNT = 1000
+MAX_TOTAL_RETURNED_SAMPLES = 65_536
+ANALOG_CAPTURE_TIMEOUT_SECONDS = 5.0
+ANALOG_CAPTURE_POLL_INTERVAL_SECONDS = 0.001
 
 
 class DwfError(RuntimeError):
@@ -99,7 +108,52 @@ class CtypesDwfAdapter:
             self._dwf.FDwfDeviceClose(handle)
 
     def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
-        raise DwfError("analog waveform capture is not implemented for real backend yet")
+        handle = self._open_device(device_index)
+
+        try:
+            channel_count = c_int()
+            frequency_min = c_double()
+            frequency_max = c_double()
+            buffer_min = c_int()
+            buffer_max = c_int()
+
+            self._require_ok(self._dwf.FDwfAnalogInChannelCount(handle, byref(channel_count)))
+            self._require_ok(
+                self._dwf.FDwfAnalogInFrequencyInfo(
+                    handle,
+                    byref(frequency_min),
+                    byref(frequency_max),
+                )
+            )
+            self._require_ok(
+                self._dwf.FDwfAnalogInBufferSizeInfo(
+                    handle,
+                    byref(buffer_min),
+                    byref(buffer_max),
+                )
+            )
+
+            supported_channel_count = max(0, channel_count.value)
+            max_sample_count = max(1, buffer_max.value)
+            max_total_samples = min(
+                max_sample_count * max(1, supported_channel_count),
+                MAX_TOTAL_RETURNED_SAMPLES,
+            )
+            default_sample_count = min(DEFAULT_CAPTURE_SAMPLE_COUNT, max_sample_count)
+
+            return AnalogCaptureLimits(
+                supported_channels=list(range(1, supported_channel_count + 1)),
+                default_sample_rate_hz=_clamp(
+                    DEFAULT_CAPTURE_SAMPLE_RATE_HZ,
+                    frequency_min.value,
+                    frequency_max.value,
+                ),
+                default_sample_count=default_sample_count,
+                max_sample_count_per_channel=max_sample_count,
+                max_total_returned_samples=max_total_samples,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
 
     def capture_analog_waveform(
         self,
@@ -108,7 +162,76 @@ class CtypesDwfAdapter:
         sample_rate_hz: float,
         sample_count: int,
     ) -> AnalogCapture:
-        raise DwfError("analog waveform capture is not implemented for real backend yet")
+        handle = self._open_device(device_index)
+
+        try:
+            self._require_ok(self._dwf.FDwfDeviceAutoConfigureSet(handle, c_int(0)))
+            self._require_ok(self._dwf.FDwfAnalogInReset(handle))
+
+            for channel_index in channel_indices:
+                self._require_ok(
+                    self._dwf.FDwfAnalogInChannelEnableSet(
+                        handle,
+                        c_int(channel_index),
+                        c_int(1),
+                    )
+                )
+
+            self._require_ok(
+                self._dwf.FDwfAnalogInAcquisitionModeSet(handle, c_int(ACQMODE_SINGLE))
+            )
+            self._require_ok(self._dwf.FDwfAnalogInFrequencySet(handle, c_double(sample_rate_hz)))
+            self._require_ok(self._dwf.FDwfAnalogInBufferSizeSet(handle, c_int(sample_count)))
+            self._require_ok(self._dwf.FDwfAnalogInConfigure(handle, c_int(1), c_int(1)))
+            self._wait_for_analog_capture(handle)
+
+            actual_sample_rate = c_double()
+            self._require_ok(self._dwf.FDwfAnalogInFrequencyGet(handle, byref(actual_sample_rate)))
+
+            samples: dict[str, list[float]] = {}
+            for channel_index in channel_indices:
+                sample_buffer = (c_double * sample_count)()
+                self._require_ok(
+                    self._dwf.FDwfAnalogInStatusData(
+                        handle,
+                        c_int(channel_index),
+                        sample_buffer,
+                        c_int(sample_count),
+                    )
+                )
+                samples[str(channel_index + 1)] = [float(sample) for sample in sample_buffer]
+
+            return AnalogCapture(
+                sample_rate_hz=float(actual_sample_rate.value),
+                sample_count=sample_count,
+                channels=[channel_index + 1 for channel_index in channel_indices],
+                samples=samples,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def _open_device(self, device_index: int) -> c_int:
+        handle = c_int()
+        self._require_ok(self._dwf.FDwfDeviceOpen(c_int(device_index), byref(handle)))
+        if handle.value == 0:
+            raise DeviceOpenError(self._last_error_message("Unable to open WaveForms device"))
+        return handle
+
+    def _wait_for_analog_capture(self, handle: c_int) -> None:
+        deadline = time.monotonic() + getattr(
+            self,
+            "_capture_timeout_seconds",
+            ANALOG_CAPTURE_TIMEOUT_SECONDS,
+        )
+        status = c_byte()
+
+        while True:
+            self._require_ok(self._dwf.FDwfAnalogInStatus(handle, c_int(1), byref(status)))
+            if status.value == DWF_STATE_DONE:
+                return
+            if time.monotonic() >= deadline:
+                raise DwfError("analog waveform capture timed out")
+            time.sleep(ANALOG_CAPTURE_POLL_INTERVAL_SECONDS)
 
     def _require_ok(self, result: int) -> None:
         if not result:
@@ -129,6 +252,10 @@ def _decode_buffer(buffer: object) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return str(value)
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)
 
 
 class LazyDwfAdapter:

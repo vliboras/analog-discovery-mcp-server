@@ -17,14 +17,13 @@ Implemented MCP tools:
 - `get_analog_capture_limits`
 - `capture_analog_waveform`
 
-The first three tools work against the real WaveForms backend. Analog waveform
-capture exists in the service, MCP registration, and fake backend, but the real
-WaveForms backend intentionally returns a clear not-implemented error until
-hardware-backed capture is added.
+All five tools work against the fake backend. The real WaveForms backend supports
+version detection, device listing, analog voltage reads, analog capture limit
+reporting, and small analog waveform captures.
 
 ## Development Stages
 
-### Stage 1: Public Read/Capture Alpha
+### Stage 1: Public Read/Capture Alpha - Closed
 
 Ready state: the repository is public-useful for read-only Analog Discovery 2/3
 workflows.
@@ -115,6 +114,96 @@ Ready state: the project is ready for broader public use and maintenance.
 - `SECURITY.md`: minimal vulnerability-reporting policy.
 
 Avoid adding more Markdown files unless they have a clear maintenance role.
+
+## Stage 1 Implementation Notes
+
+Status: implemented for single-acquisition analog captures. Keep these notes as
+the acceptance contract for future Stage 1 maintenance.
+
+### Public API
+
+- Do not add new MCP tools for Stage 1.
+- Keep `get_analog_capture_limits` response fields:
+  - `supported_channels`
+  - `default_sample_rate_hz`
+  - `default_sample_count`
+  - `max_sample_count_per_channel`
+  - `max_total_returned_samples`
+  - `device`
+- Keep `capture_analog_waveform` response fields:
+  - `requested_sample_rate_hz`
+  - `actual_sample_rate_hz`
+  - `sample_count`
+  - `duration_seconds`
+  - `channels`
+  - `samples`
+  - `device`
+- Continue returning channel keys as user-facing strings such as `"1"` and
+  `"2"`.
+
+### Real Backend Behavior
+
+- `CtypesDwfAdapter.get_analog_capture_limits` uses a short device open/close
+  cycle:
+  - open the selected device with `FDwfDeviceOpen`
+  - query analog input channel count with `FDwfAnalogInChannelCount`
+  - query sample rate bounds with `FDwfAnalogInFrequencyInfo`
+  - query buffer size bounds with `FDwfAnalogInBufferSizeInfo`
+  - return supported user-facing channels starting at `1`
+- Use a conservative default for returned limits:
+  - default sample rate: keep `1000.0`
+  - default sample count: keep `1000`
+  - max sample count per channel: WaveForms buffer max
+  - max total returned samples: buffer max multiplied by selected supported
+    channel count only if memory use stays reasonable; otherwise keep the
+    current fake limit of `65_536` until larger payload handling is designed
+- `CtypesDwfAdapter.capture_analog_waveform` uses single-acquisition AnalogIn
+  calls:
+  - open selected device and disable auto-config with `FDwfDeviceAutoConfigureSet`
+  - reset/configure AnalogIn state as needed
+  - enable only requested channels with `FDwfAnalogInChannelEnableSet`
+  - set acquisition mode to `acqmodeSingle`
+  - set requested sample rate with `FDwfAnalogInFrequencySet`
+  - set requested sample count with `FDwfAnalogInBufferSizeSet`
+  - start capture with `FDwfAnalogInConfigure(..., fStart=1)`
+  - poll `FDwfAnalogInStatus(..., fReadData=1)` until `DwfStateDone`
+  - read actual sample rate with `FDwfAnalogInFrequencyGet`
+  - read each requested channel with `FDwfAnalogInStatusData`
+  - always close the device in `finally`
+- Add a bounded wait loop and return a clear `DwfError` on timeout instead of
+  blocking indefinitely.
+- Keep trigger configuration out of Stage 1; Stage 2 owns trigger behavior.
+- Use double samples first; do not switch to 16-bit capture until payload size
+  or performance requires it.
+
+### Test Contract
+
+- Add adapter-level tests with a small fake ctypes object that records
+  WaveForms calls and returns deterministic sample buffers.
+- Replace the current real-backend not-implemented tests with tests for:
+  - limit query opens and closes the selected device
+  - capture configures requested channels and sample count/rate
+  - capture returns actual sample rate and per-channel samples
+  - capture closes the device when an SDK call fails
+  - capture timeout returns a clear `DwfError`
+- Keep existing service validation tests unchanged unless the real limit fields
+  require narrower assertions.
+- Extend `tests/test_hardware.py` behind `AD_MCP_HARDWARE_TESTS=1` with a small
+  low-sample-count capture smoke test.
+- Run before completion:
+  - `uv run ruff check`
+  - `uv run mypy`
+  - `uv run pytest`
+  - optional with hardware: `AD_MCP_HARDWARE_TESTS=1 uv run pytest -m hardware`
+
+### Done Criteria
+
+- `AD_MCP_DWF_BACKEND=fake` behavior remains deterministic and unchanged.
+- Real backend no longer returns "analog waveform capture is not implemented"
+  for Stage 1 capture tools.
+- No output-driving instruments are introduced.
+- README no longer describes analog capture as fake-only once the real backend
+  implementation and hardware smoke test are in place.
 
 ## Code Quality Rules
 

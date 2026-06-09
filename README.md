@@ -9,8 +9,7 @@ This project exposes a small, read-only Stage 1 tool surface for local MCP clien
 - Read one analog input voltage sample from channel 1 or 2.
 
 V1 intentionally avoids tools that drive hardware outputs such as Wavegen, power supplies, and digital output.
-Analog waveform capture is currently demo-only in the fake backend; the real WaveForms
-backend does not implement capture yet.
+Analog waveform capture is supported for small local captures.
 
 ## Requirements
 
@@ -105,21 +104,20 @@ Inputs:
 - `device_index`: optional zero-based device index
 - `serial_number`: optional device serial number
 
-## Experimental Fake Backend Tools
+## Analog Capture Tools
 
-These tools are available through MCP, but they are currently useful only with
-`AD_MCP_DWF_BACKEND=fake`. The real WaveForms backend returns a clear "not implemented" error
-until hardware-backed capture is added.
+These tools are available through MCP for both real WaveForms hardware and the fake backend.
 
 ### `get_analog_capture_limits`
 
-Returns simulated analog waveform capture limits for the selected fake device.
+Returns analog waveform capture limits for the selected device.
 
 The fake backend reports AD3-like limits: 32,768 samples per channel and 65,536 total returned samples.
+The real backend reports supported analog input channels and WaveForms buffer limits, with a conservative total returned sample limit.
 
 ### `capture_analog_waveform`
 
-Returns deterministic simulated analog input waveform samples.
+Returns analog input waveform samples for the selected channel or channels.
 
 Inputs:
 

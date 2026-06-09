@@ -22,3 +22,23 @@ def test_hardware_can_list_devices() -> None:
     assert result.ok is True
     assert result.data is not None
     assert "devices" in result.data
+
+
+@pytest.mark.skipif(
+    os.environ.get("AD_MCP_HARDWARE_TESTS") != "1",
+    reason="set AD_MCP_HARDWARE_TESTS=1 to run hardware tests",
+)
+def test_hardware_can_capture_small_analog_waveform() -> None:
+    service = AnalogDiscoveryService(CtypesDwfAdapter())
+
+    result = service.capture_analog_waveform(
+        channels=[1],
+        sample_rate_hz=1000.0,
+        sample_count=16,
+    )
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["channels"] == [1]
+    assert result.data["sample_count"] == 16
+    assert len(result.data["samples"]["1"]) == 16

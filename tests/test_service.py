@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
-from analog_discovery_mcp.dwf import CtypesDwfAdapter, DwfError
+from analog_discovery_mcp.dwf import DwfError
 from analog_discovery_mcp.models import AnalogCaptureLimits, DeviceInfo
 from analog_discovery_mcp.service import (
     ENV_DEVICE_INDEX,
@@ -277,21 +275,3 @@ def test_capture_rejects_excessive_total_samples(sample_devices: list[DeviceInfo
     assert result.ok is False
     assert result.error == "total returned samples must be at most 8"
 
-
-def test_real_backend_capture_limits_are_unimplemented() -> None:
-    adapter = CtypesDwfAdapter.__new__(CtypesDwfAdapter)
-
-    with pytest.raises(DwfError, match="analog waveform capture is not implemented"):
-        adapter.get_analog_capture_limits(device_index=0)
-
-
-def test_real_backend_capture_is_unimplemented() -> None:
-    adapter = CtypesDwfAdapter.__new__(CtypesDwfAdapter)
-
-    with pytest.raises(DwfError, match="analog waveform capture is not implemented"):
-        adapter.capture_analog_waveform(
-            device_index=0,
-            channel_indices=[0],
-            sample_rate_hz=1000.0,
-            sample_count=8,
-        )
