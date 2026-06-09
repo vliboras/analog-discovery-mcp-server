@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from analog_discovery_mcp.adapters import DwfAdapter
@@ -12,6 +14,62 @@ from analog_discovery_mcp.models import (
     AnalogTriggerConfig,
     DeviceInfo,
 )
+
+ENV_HARDWARE_TESTS = "AD_MCP_HARDWARE_TESTS"
+ENV_HARDWARE_STAND = "AD_MCP_HARDWARE_STAND"
+DEFAULT_HARDWARE_STAND = "basic"
+HARDWARE_STAND_ORDER = {
+    "basic": 0,
+    "analog-loopback": 1,
+    "mixed-signal-loopback": 2,
+}
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    hardware_items = [item for item in items if "hardware" in item.keywords]
+    if not hardware_items:
+        return
+
+    hardware_enabled = os.environ.get(ENV_HARDWARE_TESTS) == "1"
+    selected_stand = os.environ.get(ENV_HARDWARE_STAND, DEFAULT_HARDWARE_STAND)
+    if hardware_enabled and selected_stand not in HARDWARE_STAND_ORDER:
+        raise pytest.UsageError(
+            f"unknown {ENV_HARDWARE_STAND}={selected_stand!r}; expected one of: "
+            f"{', '.join(HARDWARE_STAND_ORDER)}"
+        )
+
+    for item in hardware_items:
+        if not hardware_enabled:
+            item.add_marker(
+                pytest.mark.skip(reason=f"set {ENV_HARDWARE_TESTS}=1 to run hardware tests")
+            )
+            continue
+
+        stand_marker = item.get_closest_marker("hardware_stand")
+        required_stand = (
+            DEFAULT_HARDWARE_STAND
+            if stand_marker is None
+            else str(stand_marker.args[0])
+        )
+        if required_stand not in HARDWARE_STAND_ORDER:
+            raise pytest.UsageError(
+                f"unknown hardware_stand marker value {required_stand!r} on {item.nodeid}; "
+                f"expected one of: {', '.join(HARDWARE_STAND_ORDER)}"
+            )
+
+        if not _stand_satisfies(selected_stand, required_stand):
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=(
+                        f"requires {ENV_HARDWARE_STAND}={required_stand}; "
+                        f"selected {selected_stand!r}"
+                    )
+                )
+            )
+
+
+def _stand_satisfies(selected_stand: str, required_stand: str) -> bool:
+    return HARDWARE_STAND_ORDER[selected_stand] >= HARDWARE_STAND_ORDER[required_stand]
 
 
 class FakeDwfAdapter(DwfAdapter):

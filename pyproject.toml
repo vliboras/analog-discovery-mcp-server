@@ -51,6 +51,7 @@ addopts = "-ra"
 testpaths = ["tests"]
 markers = [
   "hardware: requires Digilent WaveForms SDK and connected Analog Discovery hardware",
+  "hardware_stand(name): requires a named Analog Discovery hardware test stand",
 ]
 
 [tool.ruff]

@@ -112,6 +112,7 @@ Ready state: the project is ready for broader public use and maintenance.
 - `README.md`: install, quickstart, current tools, fake backend, and essential
   usage notes.
 - `docs/ROADMAP.md`: staged development plan and future-agent project memory.
+- `docs/HARDWARE_TESTING.md`: hardware test stand setup and selection.
 - `CHANGELOG.md`: release history.
 - `CONTRIBUTING.md`: local development and test commands.
 - `SECURITY.md`: minimal vulnerability-reporting policy.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add hardware test stand selection with documented broad bench profiles.
 - Implement Stage 2 scope usability tools.
 - Add analog edge trigger options to `capture_analog_waveform`.
 - Add capture metadata for trigger state, sample validity, lost/corrupt counts,

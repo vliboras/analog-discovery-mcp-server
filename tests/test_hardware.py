@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from analog_discovery_mcp.dwf import CtypesDwfAdapter
@@ -10,10 +8,7 @@ from analog_discovery_mcp.service import AnalogDiscoveryService
 pytestmark = pytest.mark.hardware
 
 
-@pytest.mark.skipif(
-    os.environ.get("AD_MCP_HARDWARE_TESTS") != "1",
-    reason="set AD_MCP_HARDWARE_TESTS=1 to run hardware tests",
-)
+@pytest.mark.hardware_stand("basic")
 def test_hardware_can_list_devices() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
@@ -24,10 +19,7 @@ def test_hardware_can_list_devices() -> None:
     assert "devices" in result.data
 
 
-@pytest.mark.skipif(
-    os.environ.get("AD_MCP_HARDWARE_TESTS") != "1",
-    reason="set AD_MCP_HARDWARE_TESTS=1 to run hardware tests",
-)
+@pytest.mark.hardware_stand("basic")
 def test_hardware_can_capture_small_analog_waveform() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
@@ -44,10 +36,7 @@ def test_hardware_can_capture_small_analog_waveform() -> None:
     assert len(result.data["samples"]["1"]) == 16
 
 
-@pytest.mark.skipif(
-    os.environ.get("AD_MCP_HARDWARE_TESTS") != "1",
-    reason="set AD_MCP_HARDWARE_TESTS=1 to run hardware tests",
-)
+@pytest.mark.hardware_stand("basic")
 def test_hardware_can_report_analog_input_status() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
@@ -59,10 +48,7 @@ def test_hardware_can_report_analog_input_status() -> None:
     assert result.data["buffer_size_max"] >= result.data["buffer_size_min"]
 
 
-@pytest.mark.skipif(
-    os.environ.get("AD_MCP_HARDWARE_TESTS") != "1",
-    reason="set AD_MCP_HARDWARE_TESTS=1 to run hardware tests",
-)
+@pytest.mark.hardware_stand("basic")
 def test_hardware_can_measure_analog_waveform() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
@@ -75,10 +61,7 @@ def test_hardware_can_measure_analog_waveform() -> None:
     assert result.data["max_voltage"] >= result.data["min_voltage"]
 
 
-@pytest.mark.skipif(
-    os.environ.get("AD_MCP_HARDWARE_TRIGGER_TESTS") != "1",
-    reason="set AD_MCP_HARDWARE_TRIGGER_TESTS=1 and apply a rising edge crossing 0.5 V",
-)
+@pytest.mark.hardware_stand("analog-loopback")
 def test_hardware_can_capture_with_analog_trigger() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
