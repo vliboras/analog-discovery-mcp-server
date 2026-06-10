@@ -18,11 +18,16 @@ Implemented MCP tools:
 - `capture_analog_waveform`
 - `measure_analog_waveform`
 - `get_analog_input_status`
+- `get_wavegen_limits`
+- `start_wavegen`
+- `stop_wavegen`
+- `get_wavegen_status`
 
 All tools work against the fake backend. The real WaveForms backend supports
 version detection, device listing, analog voltage reads, analog capture limit
 reporting, small analog waveform captures with analog edge triggers, core
-waveform measurements, and analog input status reporting.
+waveform measurements, analog input status reporting, and basic Wavegen output
+control.
 
 ## Development Stages
 
@@ -51,7 +56,7 @@ only a raw sample fetcher.
 - Avoid long-lived hidden session state unless WaveForms behavior makes it
   necessary.
 
-### Stage 3: Controlled Analog Output
+### Stage 3: Controlled Analog Output - Implemented
 
 Ready state: the MCP server can drive Wavegen for common lab workflows.
 
@@ -61,10 +66,26 @@ Ready state: the MCP server can drive Wavegen for common lab workflows.
   - `stop_wavegen`
   - `get_wavegen_status`
 - Support basic waveform types first: sine, square, triangle, DC.
-- Add custom samples only if the API remains small and predictable.
+- Defer custom samples to Stage 3.1 with a small and predictable API.
 - Validate channel, frequency, amplitude, offset, duty cycle, and sample limits
   in the service layer.
 - Make the fake backend simulate output state for tests.
+
+### Stage 3.1: Custom Wavegen Samples - Planned
+
+Ready state: the MCP server can play a bounded repeated custom analog waveform.
+
+- Add repeated custom samples after basic Wavegen is stable.
+- Planned API shape:
+  - `waveform="custom"`
+  - `samples: list[float]`
+  - `sample_rate_hz`
+  - bounded sample count
+  - repeated playback only
+- Do not add streaming/play mode yet.
+- Real backend likely uses `funcCustom` with `FDwfAnalogOutNodeDataSet`.
+- Fake backend stores custom sample buffers in status and validates the same
+  limits.
 
 ### Stage 4: Digital I/O And Logic Analyzer
 

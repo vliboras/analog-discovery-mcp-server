@@ -8,6 +8,9 @@ from analog_discovery_mcp.models import (
     AnalogInputStatus,
     AnalogTriggerConfig,
     DeviceInfo,
+    WavegenConfig,
+    WavegenLimits,
+    WavegenStatus,
 )
 
 
@@ -36,3 +39,15 @@ class DwfAdapter(Protocol):
 
     def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
         """Return analog input capability and current status metadata."""
+
+    def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
+        """Return Wavegen limits for the selected device."""
+
+    def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
+        """Start analog output generation."""
+
+    def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
+        """Stop analog output generation."""
+
+    def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
+        """Return analog output generation status."""

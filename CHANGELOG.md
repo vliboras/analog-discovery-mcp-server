@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Implement Stage 3 basic Wavegen output tools for sine, square, triangle, and
+  DC waveforms.
+- Add Wavegen limit, start, stop, and status support across service, fake
+  backend, real WaveForms backend, and MCP integration tests.
+- Document custom repeated waveform output as the mandatory next Stage 3.1
+  iteration.
 - Add hardware test stand selection with documented broad bench profiles.
 - Implement Stage 2 scope usability tools.
 - Add analog edge trigger options to `capture_analog_waveform`.

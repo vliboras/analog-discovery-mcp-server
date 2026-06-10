@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from ctypes import c_double, c_int
+from ctypes import c_byte, c_double, c_int
 from typing import Any, cast
 
 import pytest
 
 from analog_discovery_mcp.dwf import CtypesDwfAdapter, DwfError
-from analog_discovery_mcp.models import AnalogTriggerConfig
+from analog_discovery_mcp.models import AnalogTriggerConfig, WavegenConfig
 
 
 class FakeWaveFormsSdk:
@@ -208,6 +208,224 @@ class FakeWaveFormsSdk:
             sample_buffer[index] = float(channel * 10 + index)  # type: ignore[index]
         return self._result("FDwfAnalogInStatusData")
 
+    def FDwfAnalogOutCount(self, handle: object, channel_count: object) -> int:
+        self._record("FDwfAnalogOutCount", handle)
+        self._set_value(channel_count, 2)
+        return self._result("FDwfAnalogOutCount")
+
+    def FDwfAnalogOutNodeInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_options: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeInfo", handle, channel_index)
+        self._set_value(node_options, 1)
+        return self._result("FDwfAnalogOutNodeInfo")
+
+    def FDwfAnalogOutNodeFunctionInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        function_options: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeFunctionInfo", handle, channel_index, node_index)
+        self._set_value(function_options, 0b1111)
+        return self._result("FDwfAnalogOutNodeFunctionInfo")
+
+    def FDwfAnalogOutNodeFrequencyInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        frequency_min: object,
+        frequency_max: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeFrequencyInfo", handle, channel_index, node_index)
+        self._set_value(frequency_min, 0.1)
+        self._set_value(frequency_max, 10_000_000.0)
+        return self._result("FDwfAnalogOutNodeFrequencyInfo")
+
+    def FDwfAnalogOutNodeAmplitudeInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        amplitude_min: object,
+        amplitude_max: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeAmplitudeInfo", handle, channel_index, node_index)
+        self._set_value(amplitude_min, 0.0)
+        self._set_value(amplitude_max, 5.0)
+        return self._result("FDwfAnalogOutNodeAmplitudeInfo")
+
+    def FDwfAnalogOutNodeOffsetInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        offset_min: object,
+        offset_max: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeOffsetInfo", handle, channel_index, node_index)
+        self._set_value(offset_min, -5.0)
+        self._set_value(offset_max, 5.0)
+        return self._result("FDwfAnalogOutNodeOffsetInfo")
+
+    def FDwfAnalogOutNodeSymmetryInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        duty_min: object,
+        duty_max: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeSymmetryInfo", handle, channel_index, node_index)
+        self._set_value(duty_min, 0.0)
+        self._set_value(duty_max, 100.0)
+        return self._result("FDwfAnalogOutNodeSymmetryInfo")
+
+    def FDwfAnalogOutReset(self, handle: object, channel_index: object) -> int:
+        self._record("FDwfAnalogOutReset", handle, channel_index)
+        return self._result("FDwfAnalogOutReset")
+
+    def FDwfAnalogOutNodeEnableSet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        enabled: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeEnableSet", handle, channel_index, node_index, enabled)
+        return self._result("FDwfAnalogOutNodeEnableSet")
+
+    def FDwfAnalogOutNodeFunctionSet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        function: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeFunctionSet", handle, channel_index, node_index, function)
+        return self._result("FDwfAnalogOutNodeFunctionSet")
+
+    def FDwfAnalogOutNodeFrequencySet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        frequency_hz: object,
+    ) -> int:
+        self._record(
+            "FDwfAnalogOutNodeFrequencySet",
+            handle,
+            channel_index,
+            node_index,
+            frequency_hz,
+        )
+        return self._result("FDwfAnalogOutNodeFrequencySet")
+
+    def FDwfAnalogOutNodeAmplitudeSet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        amplitude_v: object,
+    ) -> int:
+        self._record(
+            "FDwfAnalogOutNodeAmplitudeSet",
+            handle,
+            channel_index,
+            node_index,
+            amplitude_v,
+        )
+        return self._result("FDwfAnalogOutNodeAmplitudeSet")
+
+    def FDwfAnalogOutNodeOffsetSet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        offset_v: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeOffsetSet", handle, channel_index, node_index, offset_v)
+        return self._result("FDwfAnalogOutNodeOffsetSet")
+
+    def FDwfAnalogOutNodeSymmetrySet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        duty_cycle: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeSymmetrySet", handle, channel_index, node_index, duty_cycle)
+        return self._result("FDwfAnalogOutNodeSymmetrySet")
+
+    def FDwfAnalogOutConfigure(self, handle: object, channel_index: object, start: object) -> int:
+        self._record("FDwfAnalogOutConfigure", handle, channel_index, start)
+        return self._result("FDwfAnalogOutConfigure")
+
+    def FDwfAnalogOutStatus(self, handle: object, channel_index: object, status: object) -> int:
+        self._record("FDwfAnalogOutStatus", handle, channel_index)
+        self._set_value(status, 3)
+        return self._result("FDwfAnalogOutStatus")
+
+    def FDwfAnalogOutNodeFunctionGet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        function: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeFunctionGet", handle, channel_index, node_index)
+        self._set_value(function, 1)
+        return self._result("FDwfAnalogOutNodeFunctionGet")
+
+    def FDwfAnalogOutNodeFrequencyGet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        frequency_hz: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeFrequencyGet", handle, channel_index, node_index)
+        self._set_value(frequency_hz, 1000.0)
+        return self._result("FDwfAnalogOutNodeFrequencyGet")
+
+    def FDwfAnalogOutNodeAmplitudeGet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        amplitude_v: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeAmplitudeGet", handle, channel_index, node_index)
+        self._set_value(amplitude_v, 1.0)
+        return self._result("FDwfAnalogOutNodeAmplitudeGet")
+
+    def FDwfAnalogOutNodeOffsetGet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        offset_v: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeOffsetGet", handle, channel_index, node_index)
+        self._set_value(offset_v, 0.0)
+        return self._result("FDwfAnalogOutNodeOffsetGet")
+
+    def FDwfAnalogOutNodeSymmetryGet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        duty_cycle: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeSymmetryGet", handle, channel_index, node_index)
+        self._set_value(duty_cycle, 50.0)
+        return self._result("FDwfAnalogOutNodeSymmetryGet")
+
     def FDwfGetLastErrorMsg(self, message: object) -> None:
         cast(Any, message).value = self.last_error.encode("utf-8")
 
@@ -223,6 +441,8 @@ class FakeWaveFormsSdk:
 
     def _value(self, value: object) -> int:
         if isinstance(value, c_int):
+            return int(value.value)
+        if isinstance(value, c_byte):
             return int(value.value)
         if isinstance(value, c_double):
             return int(value.value)
@@ -365,6 +585,103 @@ def test_real_capture_times_out() -> None:
             channel_indices=[0],
             sample_rate_hz=2000.0,
             sample_count=4,
+        )
+
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_wavegen_limits_query_opens_and_closes_device() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    limits = adapter.get_wavegen_limits(device_index=0)
+
+    assert limits.supported_channels == [1, 2]
+    assert limits.supported_waveforms == ["sine", "square", "triangle", "dc"]
+    assert limits.channel_limits["1"].frequency_min_hz == 0.1
+    assert limits.channel_limits["1"].amplitude_max_v == 5.0
+    assert _call_names(sdk)[0] == "FDwfDeviceOpen"
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+    assert "FDwfAnalogOutCount" in _call_names(sdk)
+    assert "FDwfAnalogOutNodeFunctionInfo" in _call_names(sdk)
+
+
+def test_real_wavegen_start_configures_output() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.start_wavegen(
+        device_index=0,
+        config=WavegenConfig(
+            channel=2,
+            waveform="square",
+            frequency_hz=2000.0,
+            amplitude_v=1.5,
+            offset_v=0.25,
+            duty_cycle_percent=40.0,
+        ),
+    )
+
+    assert status.running is True
+    assert status.channel == 2
+    assert _call_names(sdk) == [
+        "FDwfDeviceOpen",
+        "FDwfDeviceAutoConfigureSet",
+        "FDwfAnalogOutReset",
+        "FDwfAnalogOutNodeEnableSet",
+        "FDwfAnalogOutNodeFunctionSet",
+        "FDwfAnalogOutNodeFrequencySet",
+        "FDwfAnalogOutNodeAmplitudeSet",
+        "FDwfAnalogOutNodeOffsetSet",
+        "FDwfAnalogOutNodeSymmetrySet",
+        "FDwfAnalogOutConfigure",
+        "FDwfDeviceClose",
+    ]
+
+
+def test_real_wavegen_stop_reads_status_and_closes_device() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.stop_wavegen(device_index=0, channel=1)
+
+    assert status.running is False
+    assert status.config is not None
+    assert status.config.waveform == "sine"
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+    assert "FDwfAnalogOutConfigure" in _call_names(sdk)
+    assert "FDwfAnalogOutStatus" in _call_names(sdk)
+
+
+def test_real_wavegen_status_returns_running_config() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.get_wavegen_status(device_index=0, channel=1)
+
+    assert status.running is True
+    assert status.state == 3
+    assert status.config is not None
+    assert status.config.frequency_hz == 1000.0
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_wavegen_closes_device_when_sdk_call_fails() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.fail_on = "FDwfAnalogOutNodeFrequencySet"
+    adapter = _adapter_with_sdk(sdk)
+
+    with pytest.raises(DwfError, match="fake sdk failure"):
+        adapter.start_wavegen(
+            device_index=0,
+            config=WavegenConfig(
+                channel=1,
+                waveform="sine",
+                frequency_hz=1000.0,
+                amplitude_v=1.0,
+                offset_v=0.0,
+                duty_cycle_percent=50.0,
+            ),
         )
 
     assert _call_names(sdk)[-1] == "FDwfDeviceClose"

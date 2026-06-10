@@ -42,10 +42,14 @@ def test_registers_expected_tools() -> None:
         "capture_analog_waveform",
         "get_analog_capture_limits",
         "get_analog_input_status",
+        "get_wavegen_limits",
         "get_waveforms_version",
         "list_devices",
         "measure_analog_waveform",
         "read_analog_voltage",
+        "start_wavegen",
+        "stop_wavegen",
+        "get_wavegen_status",
     }
 
 
@@ -78,6 +82,8 @@ def test_registered_tools_call_service() -> None:
     voltage = mcp.tools["read_analog_voltage"](channel=1)
     measurement = mcp.tools["measure_analog_waveform"](channel=1, sample_count=4)
     status = mcp.tools["get_analog_input_status"]()
+    wavegen_limits = mcp.tools["get_wavegen_limits"]()
+    wavegen_status = mcp.tools["start_wavegen"](channel=1, waveform="square")
 
     assert version == {"ok": True, "data": {"version": "3.24.3"}}
     assert devices == {
@@ -102,6 +108,12 @@ def test_registered_tools_call_service() -> None:
     assert isinstance(status, dict)
     assert status["ok"] is True
     assert status["data"]["channel_count"] == 2
+    assert isinstance(wavegen_limits, dict)
+    assert wavegen_limits["ok"] is True
+    assert wavegen_limits["data"]["supported_channels"] == [1, 2]
+    assert isinstance(wavegen_status, dict)
+    assert wavegen_status["ok"] is True
+    assert wavegen_status["data"]["running"] is True
 
 
 def test_tool_signatures_are_simple_for_mcp_schema() -> None:
@@ -119,3 +131,8 @@ def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     assert capture_annotations["trigger_enabled"] is bool
     assert capture_annotations["trigger_channel"] == int | None
     assert capture_annotations["trigger_edge"] is str
+
+    wavegen_annotations = get_type_hints(mcp.tools["start_wavegen"])
+    assert wavegen_annotations["channel"] is int
+    assert wavegen_annotations["waveform"] is str
+    assert wavegen_annotations["frequency_hz"] is float

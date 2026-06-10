@@ -139,6 +139,70 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
             serial_number=serial_number,
         ).model_dump(exclude_none=True)
 
+    @mcp.tool()
+    def get_wavegen_limits(
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Return Wavegen output limits for the selected device."""
+
+        return service.get_wavegen_limits(
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def start_wavegen(
+        channel: int = 1,
+        waveform: str = "sine",
+        frequency_hz: float = 1000.0,
+        amplitude_v: float = 1.0,
+        offset_v: float = 0.0,
+        duty_cycle_percent: float = 50.0,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Start Wavegen output on a selected analog output channel."""
+
+        return service.start_wavegen(
+            channel=channel,
+            waveform=waveform,
+            frequency_hz=frequency_hz,
+            amplitude_v=amplitude_v,
+            offset_v=offset_v,
+            duty_cycle_percent=duty_cycle_percent,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def stop_wavegen(
+        channel: int = 1,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Stop Wavegen output on a selected analog output channel."""
+
+        return service.stop_wavegen(
+            channel=channel,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def get_wavegen_status(
+        channel: int = 1,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Return Wavegen status for a selected analog output channel."""
+
+        return service.get_wavegen_status(
+            channel=channel,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
 
 def main() -> None:
     create_mcp_server().run()

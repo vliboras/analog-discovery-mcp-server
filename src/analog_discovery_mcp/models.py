@@ -69,6 +69,48 @@ class AnalogInputStatus:
     state: int | None = None
 
 
+@dataclass(frozen=True)
+class WavegenChannelLimits:
+    frequency_min_hz: float
+    frequency_max_hz: float
+    amplitude_min_v: float
+    amplitude_max_v: float
+    offset_min_v: float
+    offset_max_v: float
+    duty_cycle_min_percent: float
+    duty_cycle_max_percent: float
+
+
+@dataclass(frozen=True)
+class WavegenLimits:
+    supported_channels: list[int]
+    supported_waveforms: list[str]
+    default_waveform: str
+    default_frequency_hz: float
+    default_amplitude_v: float
+    default_offset_v: float
+    default_duty_cycle_percent: float
+    channel_limits: dict[str, WavegenChannelLimits]
+
+
+@dataclass(frozen=True)
+class WavegenConfig:
+    channel: int
+    waveform: str
+    frequency_hz: float
+    amplitude_v: float
+    offset_v: float
+    duty_cycle_percent: float
+
+
+@dataclass(frozen=True)
+class WavegenStatus:
+    channel: int
+    state: int | None
+    running: bool
+    config: WavegenConfig | None = None
+
+
 class ToolResult(BaseModel):
     ok: bool
     data: dict[str, Any] | None = None

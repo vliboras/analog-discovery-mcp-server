@@ -33,13 +33,19 @@ Requirements:
 - Includes everything from `basic`.
 - W1 connected to Scope `1+`.
 - GND connected to Scope `1-`.
-- W1 configured externally to produce a signal crossing `0.5 V` for trigger
-  validation until Wavegen tools exist in this server.
+- W1 safe to drive into Scope `1+` through the assembled loopback.
+- GND connected to Scope `1-` or shared circuit ground.
+
+Safety:
+
+- Verify output amplitude and offset before enabling Wavegen.
+- Do not connect Wavegen output to an active external source.
+- Use an appropriate load or scope input and stay within Analog Discovery limits.
 
 Used for:
 
 - analog trigger capture validation
-- future Wavegen-to-scope loopback checks
+- Wavegen-to-scope loopback checks
 - stricter waveform measurement checks
 
 ### `mixed-signal-loopback`

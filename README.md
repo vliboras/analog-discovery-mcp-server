@@ -2,15 +2,15 @@
 
 Python MCP server for Digilent Analog Discovery 2 and Analog Discovery 3.
 
-This project exposes a small read/scope-oriented tool surface for local MCP clients:
+This project exposes a small local instrument-control tool surface for MCP clients:
 
 - Detect the installed Digilent WaveForms SDK version.
 - List connected WaveForms-compatible devices.
 - Read one analog input voltage sample from channel 1 or 2.
 - Capture analog input waveforms with optional analog edge triggers.
 - Measure core voltage statistics from one analog input channel.
+- Drive basic Wavegen outputs: sine, square, triangle, and DC.
 
-V1 intentionally avoids tools that drive hardware outputs such as Wavegen, power supplies, and digital output.
 Analog waveform capture is supported for small local captures.
 
 ## Requirements
@@ -51,7 +51,7 @@ AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
 
 The fake backend is deterministic and for demos only. It reports one fake Analog Discovery 3 device,
 fixed voltage readings for channels 1 and 2, and simulated waveform capture payloads for client
-prototyping.
+prototyping. It also simulates Wavegen output state for tests.
 
 ## MCP Client Configuration
 
@@ -165,6 +165,38 @@ Returns AnalogIn capability and status metadata for the selected device.
 Outputs include channel count, frequency limits, buffer limits, current frequency and buffer size,
 per-channel range/offset, and current AnalogIn state when available.
 
+### Wavegen Output
+
+### `get_wavegen_limits`
+
+Returns Wavegen output channels, supported basic waveforms, defaults, and per-channel limits.
+
+### `start_wavegen`
+
+Starts Wavegen output on one analog output channel.
+
+Inputs:
+
+- `channel`: output channel, usually `1` or `2`; default `1`
+- `waveform`: `sine`, `square`, `triangle`, or `dc`; default `sine`
+- `frequency_hz`: output frequency for non-DC waveforms; default `1000.0`
+- `amplitude_v`: peak amplitude for non-DC waveforms; default `1.0`
+- `offset_v`: voltage offset, or DC output voltage for `dc`; default `0.0`
+- `duty_cycle_percent`: symmetry/duty cycle; default `50.0`
+- `device_index`: optional zero-based device index
+- `serial_number`: optional device serial number
+
+For `dc`, the server uses `offset_v` as the output voltage and returns an effective
+`amplitude_v` of `0.0`.
+
+### `stop_wavegen`
+
+Stops Wavegen output on one channel. The fake backend preserves the last config in status.
+
+### `get_wavegen_status`
+
+Returns Wavegen state, running flag, and current config when available.
+
 ## Development
 
 ```bash
@@ -198,6 +230,6 @@ The staged development plan lives in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Safety
 
-This first version does not expose output-driving instruments. Reading voltage still opens and configures the selected WaveForms device as required by the SDK.
+Wavegen tools drive hardware outputs. Verify wiring, voltage range, load, and common ground before starting output.
 
-Check wiring and input voltage limits before connecting any circuit to Analog Discovery hardware.
+Reading and capturing analog input still opens and configures the selected WaveForms device as required by the SDK. Check input voltage limits before connecting any circuit to Analog Discovery hardware.

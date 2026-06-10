@@ -13,6 +13,10 @@ from analog_discovery_mcp.models import (
     AnalogTriggerConfig,
     DeviceInfo,
     ToolResult,
+    WavegenChannelLimits,
+    WavegenConfig,
+    WavegenLimits,
+    WavegenStatus,
 )
 
 ENV_DEVICE_INDEX = "AD_MCP_DEVICE_INDEX"
@@ -20,6 +24,12 @@ ENV_DEVICE_SERIAL = "AD_MCP_DEVICE_SERIAL"
 DEFAULT_CAPTURE_CHANNELS = [1]
 DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
 DEFAULT_CAPTURE_SAMPLE_COUNT = 1000
+DEFAULT_WAVEGEN_CHANNEL = 1
+DEFAULT_WAVEGEN_WAVEFORM = "sine"
+DEFAULT_WAVEGEN_FREQUENCY_HZ = 1000.0
+DEFAULT_WAVEGEN_AMPLITUDE_V = 1.0
+DEFAULT_WAVEGEN_OFFSET_V = 0.0
+DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT = 50.0
 
 
 class AnalogDiscoveryService:
@@ -199,6 +209,91 @@ class AnalogDiscoveryService:
                     **asdict(status),
                     "device": asdict(selected_device),
                 },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def get_wavegen_limits(
+        self,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_wavegen_limits(selected_device.index)
+            return ToolResult(
+                ok=True,
+                data={
+                    **asdict(limits),
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def start_wavegen(
+        self,
+        channel: int = DEFAULT_WAVEGEN_CHANNEL,
+        waveform: str = DEFAULT_WAVEGEN_WAVEFORM,
+        frequency_hz: float = DEFAULT_WAVEGEN_FREQUENCY_HZ,
+        amplitude_v: float = DEFAULT_WAVEGEN_AMPLITUDE_V,
+        offset_v: float = DEFAULT_WAVEGEN_OFFSET_V,
+        duty_cycle_percent: float = DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_wavegen_limits(selected_device.index)
+            config = _build_wavegen_config(
+                channel=channel,
+                waveform=waveform,
+                frequency_hz=frequency_hz,
+                amplitude_v=amplitude_v,
+                offset_v=offset_v,
+                duty_cycle_percent=duty_cycle_percent,
+                limits=limits,
+            )
+            status = self._adapter.start_wavegen(selected_device.index, config)
+            return ToolResult(
+                ok=True,
+                data=_wavegen_status_payload(status, selected_device),
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def stop_wavegen(
+        self,
+        channel: int = DEFAULT_WAVEGEN_CHANNEL,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_wavegen_limits(selected_device.index)
+            _validate_wavegen_channel(channel, limits)
+            status = self._adapter.stop_wavegen(selected_device.index, channel)
+            return ToolResult(
+                ok=True,
+                data=_wavegen_status_payload(status, selected_device),
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def get_wavegen_status(
+        self,
+        channel: int = DEFAULT_WAVEGEN_CHANNEL,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_wavegen_limits(selected_device.index)
+            _validate_wavegen_channel(channel, limits)
+            status = self._adapter.get_wavegen_status(selected_device.index, channel)
+            return ToolResult(
+                ok=True,
+                data=_wavegen_status_payload(status, selected_device),
             )
         except (DwfError, ValueError) as exc:
             return ToolResult(ok=False, error=str(exc))
@@ -386,4 +481,108 @@ def _measure_samples(samples: list[float]) -> dict[str, float]:
         "mean_voltage": mean,
         "rms_voltage": rms,
         "peak_to_peak_voltage": max_voltage - min_voltage,
+    }
+
+
+def _build_wavegen_config(
+    *,
+    channel: int,
+    waveform: str,
+    frequency_hz: float,
+    amplitude_v: float,
+    offset_v: float,
+    duty_cycle_percent: float,
+    limits: WavegenLimits,
+) -> WavegenConfig:
+    _validate_wavegen_channel(channel, limits)
+
+    normalized_waveform = waveform.strip().lower()
+    if normalized_waveform not in limits.supported_waveforms:
+        raise ValueError(
+            "waveform must be one of "
+            f"{limits.supported_waveforms}; got {waveform!r}"
+        )
+
+    for name, value in {
+        "frequency_hz": frequency_hz,
+        "amplitude_v": amplitude_v,
+        "offset_v": offset_v,
+        "duty_cycle_percent": duty_cycle_percent,
+    }.items():
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite")
+
+    channel_limits = _wavegen_channel_limits(channel, limits)
+    _validate_range(
+        "offset_v",
+        offset_v,
+        channel_limits.offset_min_v,
+        channel_limits.offset_max_v,
+    )
+
+    if normalized_waveform == "dc":
+        return WavegenConfig(
+            channel=channel,
+            waveform=normalized_waveform,
+            frequency_hz=frequency_hz,
+            amplitude_v=0.0,
+            offset_v=offset_v,
+            duty_cycle_percent=duty_cycle_percent,
+        )
+
+    _validate_range(
+        "frequency_hz",
+        frequency_hz,
+        channel_limits.frequency_min_hz,
+        channel_limits.frequency_max_hz,
+    )
+    _validate_range(
+        "amplitude_v",
+        amplitude_v,
+        channel_limits.amplitude_min_v,
+        channel_limits.amplitude_max_v,
+    )
+    _validate_range(
+        "duty_cycle_percent",
+        duty_cycle_percent,
+        channel_limits.duty_cycle_min_percent,
+        channel_limits.duty_cycle_max_percent,
+    )
+
+    return WavegenConfig(
+        channel=channel,
+        waveform=normalized_waveform,
+        frequency_hz=frequency_hz,
+        amplitude_v=amplitude_v,
+        offset_v=offset_v,
+        duty_cycle_percent=duty_cycle_percent,
+    )
+
+
+def _validate_wavegen_channel(channel: int, limits: WavegenLimits) -> None:
+    if channel not in limits.supported_channels:
+        raise ValueError(
+            f"channel must be one of {limits.supported_channels}; got {channel}"
+        )
+
+
+def _wavegen_channel_limits(channel: int, limits: WavegenLimits) -> WavegenChannelLimits:
+    return limits.channel_limits[str(channel)]
+
+
+def _validate_range(name: str, value: float, minimum: float, maximum: float) -> None:
+    if value < minimum or value > maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+
+
+def _wavegen_status_payload(
+    status: WavegenStatus,
+    selected_device: DeviceInfo,
+) -> dict[str, object]:
+    return {
+        "channel": status.channel,
+        "state": status.state,
+        "running": status.running,
+        "config": asdict(status.config) if status.config else None,
+        "device": asdict(selected_device),
     }

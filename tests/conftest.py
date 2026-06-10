@@ -13,6 +13,10 @@ from analog_discovery_mcp.models import (
     AnalogStatusTime,
     AnalogTriggerConfig,
     DeviceInfo,
+    WavegenChannelLimits,
+    WavegenConfig,
+    WavegenLimits,
+    WavegenStatus,
 )
 
 ENV_HARDWARE_TESTS = "AD_MCP_HARDWARE_TESTS"
@@ -92,6 +96,11 @@ class FakeDwfAdapter(DwfAdapter):
         self.capture_calls: list[
             tuple[int, list[int], float, int, AnalogTriggerConfig | None]
         ] = []
+        self.wavegen_calls: list[tuple[str, int, object]] = []
+        self.wavegen_state: dict[int, WavegenStatus] = {
+            1: WavegenStatus(channel=1, state=0, running=False),
+            2: WavegenStatus(channel=2, state=0, running=False),
+        }
 
     def get_version(self) -> str:
         if self.fail_version:
@@ -163,6 +172,55 @@ class FakeDwfAdapter(DwfAdapter):
             channel_offsets={"1": 0.0, "2": 0.0},
             state=None,
         )
+
+    def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
+        limits = WavegenChannelLimits(
+            frequency_min_hz=0.1,
+            frequency_max_hz=10_000_000.0,
+            amplitude_min_v=0.0,
+            amplitude_max_v=5.0,
+            offset_min_v=-5.0,
+            offset_max_v=5.0,
+            duty_cycle_min_percent=0.0,
+            duty_cycle_max_percent=100.0,
+        )
+        return WavegenLimits(
+            supported_channels=[1, 2],
+            supported_waveforms=["sine", "square", "triangle", "dc"],
+            default_waveform="sine",
+            default_frequency_hz=1000.0,
+            default_amplitude_v=1.0,
+            default_offset_v=0.0,
+            default_duty_cycle_percent=50.0,
+            channel_limits={"1": limits, "2": limits},
+        )
+
+    def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
+        self.wavegen_calls.append(("start", device_index, config))
+        status = WavegenStatus(
+            channel=config.channel,
+            state=3,
+            running=True,
+            config=config,
+        )
+        self.wavegen_state[config.channel] = status
+        return status
+
+    def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
+        self.wavegen_calls.append(("stop", device_index, channel))
+        previous = self.wavegen_state[channel]
+        status = WavegenStatus(
+            channel=channel,
+            state=2,
+            running=False,
+            config=previous.config,
+        )
+        self.wavegen_state[channel] = status
+        return status
+
+    def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
+        self.wavegen_calls.append(("status", device_index, channel))
+        return self.wavegen_state[channel]
 
 
 @pytest.fixture

@@ -20,17 +20,38 @@ from analog_discovery_mcp.models import (
     AnalogStatusTime,
     AnalogTriggerConfig,
     DeviceInfo,
+    WavegenChannelLimits,
+    WavegenConfig,
+    WavegenLimits,
+    WavegenStatus,
 )
 
 ACQMODE_SINGLE = 0
 DWF_STATE_DONE = 2
+DWF_STATE_RUNNING = 3
 TRIGSRC_NONE = 0
 TRIGSRC_DETECTOR_ANALOG_IN = 2
 TRIGTYPE_EDGE = 0
 TRIGGER_SLOPE_RISE = 0
 TRIGGER_SLOPE_FALL = 1
+ANALOG_OUT_NODE_CARRIER = 0
+FUNC_DC = 0
+FUNC_SINE = 1
+FUNC_SQUARE = 2
+FUNC_TRIANGLE = 3
+WAVEGEN_FUNCTIONS = {
+    "sine": FUNC_SINE,
+    "square": FUNC_SQUARE,
+    "triangle": FUNC_TRIANGLE,
+    "dc": FUNC_DC,
+}
+WAVEGEN_FUNCTION_NAMES = {value: key for key, value in WAVEGEN_FUNCTIONS.items()}
 DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
 DEFAULT_CAPTURE_SAMPLE_COUNT = 1000
+DEFAULT_WAVEGEN_FREQUENCY_HZ = 1000.0
+DEFAULT_WAVEGEN_AMPLITUDE_V = 1.0
+DEFAULT_WAVEGEN_OFFSET_V = 0.0
+DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT = 50.0
 MAX_TOTAL_RETURNED_SAMPLES = 65_536
 ANALOG_CAPTURE_TIMEOUT_SECONDS = 5.0
 ANALOG_CAPTURE_POLL_INTERVAL_SECONDS = 0.001
@@ -303,12 +324,314 @@ class CtypesDwfAdapter:
         finally:
             self._dwf.FDwfDeviceClose(handle)
 
+    def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
+        handle = self._open_device(device_index)
+
+        try:
+            channel_count = c_int()
+            self._require_ok(self._dwf.FDwfAnalogOutCount(handle, byref(channel_count)))
+
+            supported_channels: list[int] = []
+            supported_waveform_values: set[int] | None = None
+            channel_limits: dict[str, WavegenChannelLimits] = {}
+
+            for channel_index in range(max(0, channel_count.value)):
+                node_options = c_int()
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeInfo(
+                        handle,
+                        c_int(channel_index),
+                        byref(node_options),
+                    )
+                )
+                if not _bit_is_set(node_options.value, ANALOG_OUT_NODE_CARRIER):
+                    continue
+
+                function_options = c_int()
+                frequency_min = c_double()
+                frequency_max = c_double()
+                amplitude_min = c_double()
+                amplitude_max = c_double()
+                offset_min = c_double()
+                offset_max = c_double()
+                duty_min = c_double()
+                duty_max = c_double()
+
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeFunctionInfo(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        byref(function_options),
+                    )
+                )
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeFrequencyInfo(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        byref(frequency_min),
+                        byref(frequency_max),
+                    )
+                )
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeAmplitudeInfo(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        byref(amplitude_min),
+                        byref(amplitude_max),
+                    )
+                )
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeOffsetInfo(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        byref(offset_min),
+                        byref(offset_max),
+                    )
+                )
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeSymmetryInfo(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        byref(duty_min),
+                        byref(duty_max),
+                    )
+                )
+
+                supported_channels.append(channel_index + 1)
+                function_values = {
+                    value
+                    for value in WAVEGEN_FUNCTIONS.values()
+                    if _bit_is_set(function_options.value, value)
+                }
+                supported_waveform_values = (
+                    function_values
+                    if supported_waveform_values is None
+                    else supported_waveform_values & function_values
+                )
+                channel_limits[str(channel_index + 1)] = WavegenChannelLimits(
+                    frequency_min_hz=float(frequency_min.value),
+                    frequency_max_hz=float(frequency_max.value),
+                    amplitude_min_v=float(amplitude_min.value),
+                    amplitude_max_v=float(amplitude_max.value),
+                    offset_min_v=float(offset_min.value),
+                    offset_max_v=float(offset_max.value),
+                    duty_cycle_min_percent=float(duty_min.value),
+                    duty_cycle_max_percent=float(duty_max.value),
+                )
+
+            supported_waveforms = [
+                name
+                for name, value in WAVEGEN_FUNCTIONS.items()
+                if supported_waveform_values is not None and value in supported_waveform_values
+            ]
+            if not supported_channels or not supported_waveforms:
+                raise DwfError("selected device does not report supported Wavegen output")
+            default_waveform = "sine" if "sine" in supported_waveforms else supported_waveforms[0]
+            return WavegenLimits(
+                supported_channels=supported_channels,
+                supported_waveforms=supported_waveforms,
+                default_waveform=default_waveform,
+                default_frequency_hz=DEFAULT_WAVEGEN_FREQUENCY_HZ,
+                default_amplitude_v=DEFAULT_WAVEGEN_AMPLITUDE_V,
+                default_offset_v=DEFAULT_WAVEGEN_OFFSET_V,
+                default_duty_cycle_percent=DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT,
+                channel_limits=channel_limits,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
+        handle = self._open_device(device_index)
+
+        try:
+            channel_index = config.channel - 1
+            self._require_ok(self._dwf.FDwfDeviceAutoConfigureSet(handle, c_int(0)))
+            self._require_ok(self._dwf.FDwfAnalogOutReset(handle, c_int(channel_index)))
+            self._require_ok(
+                self._dwf.FDwfAnalogOutNodeEnableSet(
+                    handle,
+                    c_int(channel_index),
+                    c_int(ANALOG_OUT_NODE_CARRIER),
+                    c_int(1),
+                )
+            )
+            self._write_wavegen_config(handle, channel_index, config)
+            self._require_ok(
+                self._dwf.FDwfAnalogOutConfigure(handle, c_int(channel_index), c_int(1))
+            )
+            return WavegenStatus(
+                channel=config.channel,
+                state=DWF_STATE_RUNNING,
+                running=True,
+                config=config,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
+        handle = self._open_device(device_index)
+
+        try:
+            channel_index = channel - 1
+            config = self._read_wavegen_config(handle, channel_index, channel)
+            self._require_ok(
+                self._dwf.FDwfAnalogOutConfigure(handle, c_int(channel_index), c_int(0))
+            )
+            status = c_byte()
+            self._require_ok(
+                self._dwf.FDwfAnalogOutStatus(handle, c_int(channel_index), byref(status))
+            )
+            return WavegenStatus(
+                channel=channel,
+                state=int(status.value),
+                running=False,
+                config=config,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
+        handle = self._open_device(device_index)
+
+        try:
+            channel_index = channel - 1
+            status = c_byte()
+            self._require_ok(
+                self._dwf.FDwfAnalogOutStatus(handle, c_int(channel_index), byref(status))
+            )
+            return WavegenStatus(
+                channel=channel,
+                state=int(status.value),
+                running=status.value == DWF_STATE_RUNNING,
+                config=self._read_wavegen_config(handle, channel_index, channel),
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
     def _open_device(self, device_index: int) -> c_int:
         handle = c_int()
         self._require_ok(self._dwf.FDwfDeviceOpen(c_int(device_index), byref(handle)))
         if handle.value == 0:
             raise DeviceOpenError(self._last_error_message("Unable to open WaveForms device"))
         return handle
+
+    def _write_wavegen_config(
+        self,
+        handle: c_int,
+        channel_index: int,
+        config: WavegenConfig,
+    ) -> None:
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeFunctionSet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                c_byte(WAVEGEN_FUNCTIONS[config.waveform]),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeFrequencySet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                c_double(config.frequency_hz),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeAmplitudeSet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                c_double(config.amplitude_v),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeOffsetSet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                c_double(config.offset_v),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeSymmetrySet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                c_double(config.duty_cycle_percent),
+            )
+        )
+
+    def _read_wavegen_config(
+        self,
+        handle: c_int,
+        channel_index: int,
+        channel: int,
+    ) -> WavegenConfig | None:
+        function = c_byte()
+        frequency = c_double()
+        amplitude = c_double()
+        offset = c_double()
+        duty_cycle = c_double()
+
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeFunctionGet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                byref(function),
+            )
+        )
+        waveform = WAVEGEN_FUNCTION_NAMES.get(function.value)
+        if waveform is None:
+            return None
+
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeFrequencyGet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                byref(frequency),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeAmplitudeGet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                byref(amplitude),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeOffsetGet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                byref(offset),
+            )
+        )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodeSymmetryGet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                byref(duty_cycle),
+            )
+        )
+
+        return WavegenConfig(
+            channel=channel,
+            waveform=waveform,
+            frequency_hz=float(frequency.value),
+            amplitude_v=float(amplitude.value),
+            offset_v=float(offset.value),
+            duty_cycle_percent=float(duty_cycle.value),
+        )
 
     def _configure_analog_trigger(
         self,
@@ -449,6 +772,10 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
     return min(max(value, minimum), maximum)
 
 
+def _bit_is_set(value: int, bit_index: int) -> bool:
+    return bool(value & (1 << bit_index))
+
+
 class LazyDwfAdapter:
     """Delay WaveForms SDK loading until a tool actually needs hardware access."""
 
@@ -486,6 +813,18 @@ class LazyDwfAdapter:
 
     def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
         return self._get_adapter().get_analog_input_status(device_index)
+
+    def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
+        return self._get_adapter().get_wavegen_limits(device_index)
+
+    def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
+        return self._get_adapter().start_wavegen(device_index, config)
+
+    def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
+        return self._get_adapter().stop_wavegen(device_index, channel)
+
+    def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
+        return self._get_adapter().get_wavegen_status(device_index, channel)
 
     def _get_adapter(self) -> CtypesDwfAdapter:
         if self._adapter is None:

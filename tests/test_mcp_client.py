@@ -34,10 +34,14 @@ async def _call_fake_backend_tools() -> None:
             "capture_analog_waveform",
             "get_analog_capture_limits",
             "get_analog_input_status",
+            "get_wavegen_limits",
             "get_waveforms_version",
             "list_devices",
             "measure_analog_waveform",
             "read_analog_voltage",
+            "start_wavegen",
+            "stop_wavegen",
+            "get_wavegen_status",
         }
 
         version = await session.call_tool("get_waveforms_version", {})
@@ -86,6 +90,35 @@ async def _call_fake_backend_tools() -> None:
         status_payload = _structured_content(status)
         assert status_payload["ok"] is True
         assert status_payload["data"]["channel_count"] == 2
+
+        wavegen_limits = await session.call_tool("get_wavegen_limits", {})
+        wavegen_limits_payload = _structured_content(wavegen_limits)
+        assert wavegen_limits_payload["ok"] is True
+        assert wavegen_limits_payload["data"]["supported_waveforms"] == [
+            "sine",
+            "square",
+            "triangle",
+            "dc",
+        ]
+
+        wavegen_start = await session.call_tool(
+            "start_wavegen",
+            {"channel": 1, "waveform": "triangle", "frequency_hz": 2000.0},
+        )
+        wavegen_start_payload = _structured_content(wavegen_start)
+        assert wavegen_start_payload["ok"] is True
+        assert wavegen_start_payload["data"]["running"] is True
+        assert wavegen_start_payload["data"]["config"]["waveform"] == "triangle"
+
+        wavegen_status = await session.call_tool("get_wavegen_status", {"channel": 1})
+        wavegen_status_payload = _structured_content(wavegen_status)
+        assert wavegen_status_payload["ok"] is True
+        assert wavegen_status_payload["data"]["running"] is True
+
+        wavegen_stop = await session.call_tool("stop_wavegen", {"channel": 1})
+        wavegen_stop_payload = _structured_content(wavegen_stop)
+        assert wavegen_stop_payload["ok"] is True
+        assert wavegen_stop_payload["data"]["running"] is False
 
 
 def _structured_content(result: Any) -> dict[str, Any]:

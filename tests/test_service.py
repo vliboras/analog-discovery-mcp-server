@@ -397,3 +397,127 @@ def test_get_analog_input_status_returns_status_shape(
     assert result.data["buffer_size_max"] == 32_768
     assert result.data["channel_ranges"] == {"1": 5.0, "2": 5.0}
     assert result.data["device"]["serial_number"] == "SN:AD2"
+
+
+def test_get_wavegen_limits_returns_status_shape(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.get_wavegen_limits()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["supported_channels"] == [1, 2]
+    assert result.data["supported_waveforms"] == ["sine", "square", "triangle", "dc"]
+    assert result.data["channel_limits"]["1"]["amplitude_max_v"] == 5.0
+    assert result.data["device"]["serial_number"] == "SN:AD2"
+
+
+def test_start_wavegen_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
+    adapter = FakeDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    result = service.start_wavegen()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["running"] is True
+    assert result.data["config"] == {
+        "channel": 1,
+        "waveform": "sine",
+        "frequency_hz": 1000.0,
+        "amplitude_v": 1.0,
+        "offset_v": 0.0,
+        "duty_cycle_percent": 50.0,
+    }
+    assert adapter.wavegen_calls[0][0] == "start"
+
+
+def test_start_wavegen_normalizes_dc_amplitude(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(waveform="DC", offset_v=1.25, amplitude_v=3.0)
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["config"]["waveform"] == "dc"
+    assert result.data["config"]["amplitude_v"] == 0.0
+    assert result.data["config"]["offset_v"] == 1.25
+
+
+def test_start_wavegen_rejects_invalid_channel(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(channel=3)
+
+    assert result.ok is False
+    assert result.error == "channel must be one of [1, 2]; got 3"
+
+
+def test_start_wavegen_rejects_invalid_waveform(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(waveform="custom")
+
+    assert result.ok is False
+    assert result.error == (
+        "waveform must be one of ['sine', 'square', 'triangle', 'dc']; got 'custom'"
+    )
+
+
+def test_start_wavegen_rejects_non_finite_value(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(frequency_hz=float("nan"))
+
+    assert result.ok is False
+    assert result.error == "frequency_hz must be finite"
+
+
+def test_start_wavegen_rejects_out_of_range_frequency(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(frequency_hz=0.0)
+
+    assert result.ok is False
+    assert result.error == "frequency_hz must be between 0.1 and 10000000.0"
+
+
+def test_start_wavegen_rejects_out_of_range_amplitude(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(amplitude_v=6.0)
+
+    assert result.ok is False
+    assert result.error == "amplitude_v must be between 0.0 and 5.0"
+
+
+def test_start_wavegen_rejects_out_of_range_offset(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(offset_v=6.0)
+
+    assert result.ok is False
+    assert result.error == "offset_v must be between -5.0 and 5.0"
+
+
+def test_start_wavegen_rejects_out_of_range_duty_cycle(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(duty_cycle_percent=101.0)
+
+    assert result.ok is False
+    assert result.error == "duty_cycle_percent must be between 0.0 and 100.0"
+
+
+def test_stop_wavegen_returns_last_config(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    service.start_wavegen(channel=2, waveform="triangle")
+    result = service.stop_wavegen(channel=2)
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["running"] is False
+    assert result.data["config"]["waveform"] == "triangle"
