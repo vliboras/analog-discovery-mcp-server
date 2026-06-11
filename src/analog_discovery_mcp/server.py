@@ -159,6 +159,8 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
         amplitude_v: float = 1.0,
         offset_v: float = 0.0,
         duty_cycle_percent: float = 50.0,
+        samples: list[float] | None = None,
+        sample_rate_hz: float | None = None,
         device_index: int | None = None,
         serial_number: str | None = None,
     ) -> dict[str, object]:
@@ -171,6 +173,8 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
             amplitude_v=amplitude_v,
             offset_v=offset_v,
             duty_cycle_percent=duty_cycle_percent,
+            samples=samples,
+            sample_rate_hz=sample_rate_hz,
             device_index=device_index,
             serial_number=serial_number,
         ).model_dump(exclude_none=True)

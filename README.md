@@ -9,7 +9,7 @@ This project exposes a small local instrument-control tool surface for MCP clien
 - Read one analog input voltage sample from channel 1 or 2.
 - Capture analog input waveforms with optional analog edge triggers.
 - Measure core voltage statistics from one analog input channel.
-- Drive basic Wavegen outputs: sine, square, triangle, and DC.
+- Drive Wavegen outputs: sine, square, triangle, DC, and bounded custom samples.
 
 Analog waveform capture is supported for small local captures.
 
@@ -169,7 +169,7 @@ per-channel range/offset, and current AnalogIn state when available.
 
 ### `get_wavegen_limits`
 
-Returns Wavegen output channels, supported basic waveforms, defaults, and per-channel limits.
+Returns Wavegen output channels, supported waveforms, defaults, and per-channel limits.
 
 ### `start_wavegen`
 
@@ -178,16 +178,34 @@ Starts Wavegen output on one analog output channel.
 Inputs:
 
 - `channel`: output channel, usually `1` or `2`; default `1`
-- `waveform`: `sine`, `square`, `triangle`, or `dc`; default `sine`
+- `waveform`: `sine`, `square`, `triangle`, `dc`, or `custom`; default `sine`
 - `frequency_hz`: output frequency for non-DC waveforms; default `1000.0`
 - `amplitude_v`: peak amplitude for non-DC waveforms; default `1.0`
 - `offset_v`: voltage offset, or DC output voltage for `dc`; default `0.0`
 - `duty_cycle_percent`: symmetry/duty cycle; default `50.0`
+- `samples`: normalized `custom` waveform samples, each between `-1.0` and `1.0`
+- `sample_rate_hz`: playback sample rate for `custom`; required with `samples`
 - `device_index`: optional zero-based device index
 - `serial_number`: optional device serial number
 
 For `dc`, the server uses `offset_v` as the output voltage and returns an effective
 `amplitude_v` of `0.0`.
+
+For `custom`, `samples` defines one repeated cycle. The server converts
+`sample_rate_hz / len(samples)` into the WaveForms cycle frequency and validates the
+sample count against `get_wavegen_limits`.
+
+Example custom waveform:
+
+```json
+{
+  "waveform": "custom",
+  "samples": [-1.0, 0.0, 1.0, 0.0],
+  "sample_rate_hz": 4000.0,
+  "amplitude_v": 1.0,
+  "offset_v": 0.0
+}
+```
 
 ### `stop_wavegen`
 
@@ -230,6 +248,6 @@ The staged development plan lives in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Safety
 
-Wavegen tools drive hardware outputs. Verify wiring, voltage range, load, and common ground before starting output.
+Wavegen tools drive hardware outputs, including arbitrary custom buffers. Verify wiring, voltage range, load, and common ground before starting output.
 
 Reading and capturing analog input still opens and configures the selected WaveForms device as required by the SDK. Check input voltage limits before connecting any circuit to Analog Discovery hardware.

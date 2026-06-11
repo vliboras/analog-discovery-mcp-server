@@ -136,3 +136,5 @@ def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     assert wavegen_annotations["channel"] is int
     assert wavegen_annotations["waveform"] is str
     assert wavegen_annotations["frequency_hz"] is float
+    assert wavegen_annotations["samples"] == list[float] | None
+    assert wavegen_annotations["sample_rate_hz"] == float | None

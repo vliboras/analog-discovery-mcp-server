@@ -39,11 +39,13 @@ FUNC_DC = 0
 FUNC_SINE = 1
 FUNC_SQUARE = 2
 FUNC_TRIANGLE = 3
+FUNC_CUSTOM = 30
 WAVEGEN_FUNCTIONS = {
     "sine": FUNC_SINE,
     "square": FUNC_SQUARE,
     "triangle": FUNC_TRIANGLE,
     "dc": FUNC_DC,
+    "custom": FUNC_CUSTOM,
 }
 WAVEGEN_FUNCTION_NAMES = {value: key for key, value in WAVEGEN_FUNCTIONS.items()}
 DEFAULT_CAPTURE_SAMPLE_RATE_HZ = 1000.0
@@ -356,6 +358,8 @@ class CtypesDwfAdapter:
                 offset_max = c_double()
                 duty_min = c_double()
                 duty_max = c_double()
+                custom_sample_count_min: int | None = None
+                custom_sample_count_max: int | None = None
 
                 self._require_ok(
                     self._dwf.FDwfAnalogOutNodeFunctionInfo(
@@ -408,6 +412,20 @@ class CtypesDwfAdapter:
                     for value in WAVEGEN_FUNCTIONS.values()
                     if _bit_is_set(function_options.value, value)
                 }
+                if FUNC_CUSTOM in function_values:
+                    data_min = c_int()
+                    data_max = c_int()
+                    self._require_ok(
+                        self._dwf.FDwfAnalogOutNodeDataInfo(
+                            handle,
+                            c_int(channel_index),
+                            c_int(ANALOG_OUT_NODE_CARRIER),
+                            byref(data_min),
+                            byref(data_max),
+                        )
+                    )
+                    custom_sample_count_min = max(1, data_min.value)
+                    custom_sample_count_max = max(custom_sample_count_min, data_max.value)
                 supported_waveform_values = (
                     function_values
                     if supported_waveform_values is None
@@ -422,6 +440,8 @@ class CtypesDwfAdapter:
                     offset_max_v=float(offset_max.value),
                     duty_cycle_min_percent=float(duty_min.value),
                     duty_cycle_max_percent=float(duty_max.value),
+                    custom_sample_count_min=custom_sample_count_min,
+                    custom_sample_count_max=custom_sample_count_max,
                 )
 
             supported_waveforms = [
@@ -534,6 +554,19 @@ class CtypesDwfAdapter:
                 c_byte(WAVEGEN_FUNCTIONS[config.waveform]),
             )
         )
+        if config.waveform == "custom":
+            if config.samples is None:
+                raise DwfError("custom Wavegen config is missing samples")
+            sample_buffer = (c_double * len(config.samples))(*config.samples)
+            self._require_ok(
+                self._dwf.FDwfAnalogOutNodeDataSet(
+                    handle,
+                    c_int(channel_index),
+                    c_int(ANALOG_OUT_NODE_CARRIER),
+                    sample_buffer,
+                    c_int(len(config.samples)),
+                )
+            )
         self._require_ok(
             self._dwf.FDwfAnalogOutNodeFrequencySet(
                 handle,

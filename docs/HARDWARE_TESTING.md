@@ -39,6 +39,7 @@ Requirements:
 Safety:
 
 - Verify output amplitude and offset before enabling Wavegen.
+- Verify arbitrary custom sample buffers before enabling Wavegen.
 - Do not connect Wavegen output to an active external source.
 - Use an appropriate load or scope input and stay within Analog Discovery limits.
 

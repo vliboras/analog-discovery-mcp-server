@@ -79,6 +79,8 @@ class WavegenChannelLimits:
     offset_max_v: float
     duty_cycle_min_percent: float
     duty_cycle_max_percent: float
+    custom_sample_count_min: int | None = None
+    custom_sample_count_max: int | None = None
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,8 @@ class WavegenConfig:
     amplitude_v: float
     offset_v: float
     duty_cycle_percent: float
+    samples: list[float] | None = None
+    sample_rate_hz: float | None = None
 
 
 @dataclass(frozen=True)

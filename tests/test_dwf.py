@@ -231,8 +231,21 @@ class FakeWaveFormsSdk:
         function_options: object,
     ) -> int:
         self._record("FDwfAnalogOutNodeFunctionInfo", handle, channel_index, node_index)
-        self._set_value(function_options, 0b1111)
+        self._set_value(function_options, 0b1111 | (1 << 30))
         return self._result("FDwfAnalogOutNodeFunctionInfo")
+
+    def FDwfAnalogOutNodeDataInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        samples_min: object,
+        samples_max: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeDataInfo", handle, channel_index, node_index)
+        self._set_value(samples_min, 2)
+        self._set_value(samples_max, 4096)
+        return self._result("FDwfAnalogOutNodeDataInfo")
 
     def FDwfAnalogOutNodeFrequencyInfo(
         self,
@@ -325,6 +338,17 @@ class FakeWaveFormsSdk:
             frequency_hz,
         )
         return self._result("FDwfAnalogOutNodeFrequencySet")
+
+    def FDwfAnalogOutNodeDataSet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        samples: object,
+        sample_count: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodeDataSet", handle, channel_index, node_index, sample_count)
+        return self._result("FDwfAnalogOutNodeDataSet")
 
     def FDwfAnalogOutNodeAmplitudeSet(
         self,
@@ -597,13 +621,16 @@ def test_real_wavegen_limits_query_opens_and_closes_device() -> None:
     limits = adapter.get_wavegen_limits(device_index=0)
 
     assert limits.supported_channels == [1, 2]
-    assert limits.supported_waveforms == ["sine", "square", "triangle", "dc"]
+    assert limits.supported_waveforms == ["sine", "square", "triangle", "dc", "custom"]
     assert limits.channel_limits["1"].frequency_min_hz == 0.1
     assert limits.channel_limits["1"].amplitude_max_v == 5.0
+    assert limits.channel_limits["1"].custom_sample_count_min == 2
+    assert limits.channel_limits["1"].custom_sample_count_max == 4096
     assert _call_names(sdk)[0] == "FDwfDeviceOpen"
     assert _call_names(sdk)[-1] == "FDwfDeviceClose"
     assert "FDwfAnalogOutCount" in _call_names(sdk)
     assert "FDwfAnalogOutNodeFunctionInfo" in _call_names(sdk)
+    assert "FDwfAnalogOutNodeDataInfo" in _call_names(sdk)
 
 
 def test_real_wavegen_start_configures_output() -> None:
@@ -630,6 +657,43 @@ def test_real_wavegen_start_configures_output() -> None:
         "FDwfAnalogOutReset",
         "FDwfAnalogOutNodeEnableSet",
         "FDwfAnalogOutNodeFunctionSet",
+        "FDwfAnalogOutNodeFrequencySet",
+        "FDwfAnalogOutNodeAmplitudeSet",
+        "FDwfAnalogOutNodeOffsetSet",
+        "FDwfAnalogOutNodeSymmetrySet",
+        "FDwfAnalogOutConfigure",
+        "FDwfDeviceClose",
+    ]
+
+
+def test_real_wavegen_start_configures_custom_output() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.start_wavegen(
+        device_index=0,
+        config=WavegenConfig(
+            channel=1,
+            waveform="custom",
+            frequency_hz=1000.0,
+            amplitude_v=1.5,
+            offset_v=0.25,
+            duty_cycle_percent=50.0,
+            samples=[-1.0, 0.0, 1.0, 0.0],
+            sample_rate_hz=4000.0,
+        ),
+    )
+
+    assert status.running is True
+    assert status.config is not None
+    assert status.config.waveform == "custom"
+    assert _call_names(sdk) == [
+        "FDwfDeviceOpen",
+        "FDwfDeviceAutoConfigureSet",
+        "FDwfAnalogOutReset",
+        "FDwfAnalogOutNodeEnableSet",
+        "FDwfAnalogOutNodeFunctionSet",
+        "FDwfAnalogOutNodeDataSet",
         "FDwfAnalogOutNodeFrequencySet",
         "FDwfAnalogOutNodeAmplitudeSet",
         "FDwfAnalogOutNodeOffsetSet",
@@ -681,6 +745,29 @@ def test_real_wavegen_closes_device_when_sdk_call_fails() -> None:
                 amplitude_v=1.0,
                 offset_v=0.0,
                 duty_cycle_percent=50.0,
+            ),
+        )
+
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_wavegen_closes_device_when_custom_upload_fails() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.fail_on = "FDwfAnalogOutNodeDataSet"
+    adapter = _adapter_with_sdk(sdk)
+
+    with pytest.raises(DwfError, match="fake sdk failure"):
+        adapter.start_wavegen(
+            device_index=0,
+            config=WavegenConfig(
+                channel=1,
+                waveform="custom",
+                frequency_hz=1000.0,
+                amplitude_v=1.0,
+                offset_v=0.0,
+                duty_cycle_percent=50.0,
+                samples=[0.0, 1.0],
+                sample_rate_hz=2000.0,
             ),
         )
 

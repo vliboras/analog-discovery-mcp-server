@@ -118,8 +118,9 @@ def test_fake_adapter_reports_wavegen_limits() -> None:
     assert result.ok is True
     assert result.data is not None
     assert result.data["supported_channels"] == [1, 2]
-    assert result.data["supported_waveforms"] == ["sine", "square", "triangle", "dc"]
+    assert result.data["supported_waveforms"] == ["sine", "square", "triangle", "dc", "custom"]
     assert result.data["default_waveform"] == "sine"
+    assert result.data["channel_limits"]["1"]["custom_sample_count_max"] == 4096
 
 
 def test_fake_adapter_tracks_wavegen_state() -> None:
@@ -141,3 +142,28 @@ def test_fake_adapter_tracks_wavegen_state() -> None:
     assert stopped.data is not None
     assert stopped.data["running"] is False
     assert stopped.data["config"]["waveform"] == "square"
+
+
+def test_fake_adapter_tracks_custom_wavegen_state() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    started = service.start_wavegen(
+        channel=1,
+        waveform="custom",
+        samples=[-1.0, 0.0, 1.0, 0.0],
+        sample_rate_hz=4000.0,
+    )
+    status = service.get_wavegen_status(channel=1)
+    stopped = service.stop_wavegen(channel=1)
+
+    assert started.ok is True
+    assert started.data is not None
+    assert started.data["config"]["waveform"] == "custom"
+    assert started.data["config"]["samples"] == [-1.0, 0.0, 1.0, 0.0]
+    assert started.data["config"]["frequency_hz"] == 1000.0
+    assert status.ok is True
+    assert status.data is not None
+    assert status.data["config"]["samples"] == [-1.0, 0.0, 1.0, 0.0]
+    assert stopped.ok is True
+    assert stopped.data is not None
+    assert stopped.data["config"]["sample_rate_hz"] == 4000.0

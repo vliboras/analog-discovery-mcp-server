@@ -19,7 +19,8 @@ FAKE_DEFAULT_SAMPLE_RATE_HZ = 1000.0
 FAKE_DEFAULT_SAMPLE_COUNT = 1000
 FAKE_MAX_SAMPLE_COUNT_PER_CHANNEL = 32_768
 FAKE_MAX_TOTAL_RETURNED_SAMPLES = 65_536
-FAKE_WAVEGEN_WAVEFORMS = ["sine", "square", "triangle", "dc"]
+FAKE_CUSTOM_WAVEGEN_SAMPLE_COUNT_MAX = 4096
+FAKE_WAVEGEN_WAVEFORMS = ["sine", "square", "triangle", "dc", "custom"]
 FAKE_WAVEGEN_LIMITS = WavegenChannelLimits(
     frequency_min_hz=0.1,
     frequency_max_hz=10_000_000.0,
@@ -29,6 +30,8 @@ FAKE_WAVEGEN_LIMITS = WavegenChannelLimits(
     offset_max_v=5.0,
     duty_cycle_min_percent=0.0,
     duty_cycle_max_percent=100.0,
+    custom_sample_count_min=2,
+    custom_sample_count_max=FAKE_CUSTOM_WAVEGEN_SAMPLE_COUNT_MAX,
 )
 
 

@@ -99,6 +99,7 @@ async def _call_fake_backend_tools() -> None:
             "square",
             "triangle",
             "dc",
+            "custom",
         ]
 
         wavegen_start = await session.call_tool(
@@ -114,6 +115,21 @@ async def _call_fake_backend_tools() -> None:
         wavegen_status_payload = _structured_content(wavegen_status)
         assert wavegen_status_payload["ok"] is True
         assert wavegen_status_payload["data"]["running"] is True
+
+        wavegen_custom = await session.call_tool(
+            "start_wavegen",
+            {
+                "channel": 1,
+                "waveform": "custom",
+                "samples": [-1.0, 0.0, 1.0, 0.0],
+                "sample_rate_hz": 4000.0,
+            },
+        )
+        wavegen_custom_payload = _structured_content(wavegen_custom)
+        assert wavegen_custom_payload["ok"] is True
+        assert wavegen_custom_payload["data"]["config"]["waveform"] == "custom"
+        assert wavegen_custom_payload["data"]["config"]["samples"] == [-1.0, 0.0, 1.0, 0.0]
+        assert wavegen_custom_payload["data"]["config"]["frequency_hz"] == 1000.0
 
         wavegen_stop = await session.call_tool("stop_wavegen", {"channel": 1})
         wavegen_stop_payload = _structured_content(wavegen_stop)

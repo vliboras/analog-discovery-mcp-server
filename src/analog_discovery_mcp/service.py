@@ -239,6 +239,8 @@ class AnalogDiscoveryService:
         amplitude_v: float = DEFAULT_WAVEGEN_AMPLITUDE_V,
         offset_v: float = DEFAULT_WAVEGEN_OFFSET_V,
         duty_cycle_percent: float = DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT,
+        samples: list[float] | None = None,
+        sample_rate_hz: float | None = None,
         device_index: int | None = None,
         serial_number: str | None = None,
     ) -> ToolResult:
@@ -252,6 +254,8 @@ class AnalogDiscoveryService:
                 amplitude_v=amplitude_v,
                 offset_v=offset_v,
                 duty_cycle_percent=duty_cycle_percent,
+                samples=samples,
+                sample_rate_hz=sample_rate_hz,
                 limits=limits,
             )
             status = self._adapter.start_wavegen(selected_device.index, config)
@@ -492,6 +496,8 @@ def _build_wavegen_config(
     amplitude_v: float,
     offset_v: float,
     duty_cycle_percent: float,
+    samples: list[float] | None,
+    sample_rate_hz: float | None,
     limits: WavegenLimits,
 ) -> WavegenConfig:
     _validate_wavegen_channel(channel, limits)
@@ -503,12 +509,13 @@ def _build_wavegen_config(
             f"{limits.supported_waveforms}; got {waveform!r}"
         )
 
-    for name, value in {
-        "frequency_hz": frequency_hz,
-        "amplitude_v": amplitude_v,
-        "offset_v": offset_v,
-        "duty_cycle_percent": duty_cycle_percent,
-    }.items():
+    for name, value in _wavegen_numeric_values(
+        frequency_hz=frequency_hz,
+        amplitude_v=amplitude_v,
+        offset_v=offset_v,
+        duty_cycle_percent=duty_cycle_percent,
+        sample_rate_hz=sample_rate_hz,
+    ).items():
         if not math.isfinite(value):
             raise ValueError(f"{name} must be finite")
 
@@ -519,6 +526,41 @@ def _build_wavegen_config(
         channel_limits.offset_min_v,
         channel_limits.offset_max_v,
     )
+
+    if normalized_waveform == "custom":
+        if samples is None:
+            raise ValueError("samples are required for custom waveform")
+        if sample_rate_hz is None:
+            raise ValueError("sample_rate_hz is required for custom waveform")
+        _validate_range(
+            "amplitude_v",
+            amplitude_v,
+            channel_limits.amplitude_min_v,
+            channel_limits.amplitude_max_v,
+        )
+        custom_samples = _validate_custom_wavegen_samples(samples, channel_limits)
+        custom_frequency_hz = sample_rate_hz / len(custom_samples)
+        _validate_range(
+            "sample_rate_hz / len(samples)",
+            custom_frequency_hz,
+            channel_limits.frequency_min_hz,
+            channel_limits.frequency_max_hz,
+        )
+        return WavegenConfig(
+            channel=channel,
+            waveform=normalized_waveform,
+            frequency_hz=custom_frequency_hz,
+            amplitude_v=amplitude_v,
+            offset_v=offset_v,
+            duty_cycle_percent=duty_cycle_percent,
+            samples=custom_samples,
+            sample_rate_hz=sample_rate_hz,
+        )
+
+    if samples is not None:
+        raise ValueError("samples are only supported for custom waveform")
+    if sample_rate_hz is not None:
+        raise ValueError("sample_rate_hz is only supported for custom waveform")
 
     if normalized_waveform == "dc":
         return WavegenConfig(
@@ -566,6 +608,47 @@ def _validate_wavegen_channel(channel: int, limits: WavegenLimits) -> None:
         )
 
 
+def _wavegen_numeric_values(
+    *,
+    frequency_hz: float,
+    amplitude_v: float,
+    offset_v: float,
+    duty_cycle_percent: float,
+    sample_rate_hz: float | None,
+) -> dict[str, float]:
+    values = {
+        "frequency_hz": frequency_hz,
+        "amplitude_v": amplitude_v,
+        "offset_v": offset_v,
+        "duty_cycle_percent": duty_cycle_percent,
+    }
+    if sample_rate_hz is not None:
+        values["sample_rate_hz"] = sample_rate_hz
+    return values
+
+
+def _validate_custom_wavegen_samples(
+    samples: list[float],
+    channel_limits: WavegenChannelLimits,
+) -> list[float]:
+    sample_count = len(samples)
+    minimum = channel_limits.custom_sample_count_min
+    maximum = channel_limits.custom_sample_count_max
+    if minimum is None or maximum is None:
+        raise ValueError("selected device does not support custom Wavegen samples")
+    if sample_count < minimum or sample_count > maximum:
+        raise ValueError(f"samples length must be between {minimum} and {maximum}")
+
+    validated: list[float] = []
+    for sample in samples:
+        if not math.isfinite(sample):
+            raise ValueError("samples must be finite")
+        if sample < -1.0 or sample > 1.0:
+            raise ValueError("samples must be between -1.0 and 1.0")
+        validated.append(float(sample))
+    return validated
+
+
 def _wavegen_channel_limits(channel: int, limits: WavegenLimits) -> WavegenChannelLimits:
     return limits.channel_limits[str(channel)]
 
@@ -579,10 +662,15 @@ def _wavegen_status_payload(
     status: WavegenStatus,
     selected_device: DeviceInfo,
 ) -> dict[str, object]:
+    config = (
+        {key: value for key, value in asdict(status.config).items() if value is not None}
+        if status.config
+        else None
+    )
     return {
         "channel": status.channel,
         "state": status.state,
         "running": status.running,
-        "config": asdict(status.config) if status.config else None,
+        "config": config,
         "device": asdict(selected_device),
     }

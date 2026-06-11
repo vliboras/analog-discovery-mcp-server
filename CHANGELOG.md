@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Implement Stage 3.1 custom Wavegen sample playback through `start_wavegen`.
+- Add bounded custom sample validation and fake/real backend support with
+  WaveForms `funcCustom` uploads.
 - Implement Stage 3 basic Wavegen output tools for sine, square, triangle, and
   DC waveforms.
 - Add Wavegen limit, start, stop, and status support across service, fake

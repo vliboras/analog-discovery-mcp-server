@@ -407,8 +407,9 @@ def test_get_wavegen_limits_returns_status_shape(sample_devices: list[DeviceInfo
     assert result.ok is True
     assert result.data is not None
     assert result.data["supported_channels"] == [1, 2]
-    assert result.data["supported_waveforms"] == ["sine", "square", "triangle", "dc"]
+    assert result.data["supported_waveforms"] == ["sine", "square", "triangle", "dc", "custom"]
     assert result.data["channel_limits"]["1"]["amplitude_max_v"] == 5.0
+    assert result.data["channel_limits"]["1"]["custom_sample_count_max"] == 4096
     assert result.data["device"]["serial_number"] == "SN:AD2"
 
 
@@ -444,6 +445,27 @@ def test_start_wavegen_normalizes_dc_amplitude(sample_devices: list[DeviceInfo])
     assert result.data["config"]["offset_v"] == 1.25
 
 
+def test_start_wavegen_accepts_custom_samples(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(
+        waveform="custom",
+        samples=[-1.0, 0.0, 1.0, 0.0],
+        sample_rate_hz=4000.0,
+        amplitude_v=2.0,
+        offset_v=0.25,
+    )
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["config"]["waveform"] == "custom"
+    assert result.data["config"]["samples"] == [-1.0, 0.0, 1.0, 0.0]
+    assert result.data["config"]["sample_rate_hz"] == 4000.0
+    assert result.data["config"]["frequency_hz"] == 1000.0
+    assert result.data["config"]["amplitude_v"] == 2.0
+    assert result.data["config"]["offset_v"] == 0.25
+
+
 def test_start_wavegen_rejects_invalid_channel(sample_devices: list[DeviceInfo]) -> None:
     service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
 
@@ -456,11 +478,11 @@ def test_start_wavegen_rejects_invalid_channel(sample_devices: list[DeviceInfo])
 def test_start_wavegen_rejects_invalid_waveform(sample_devices: list[DeviceInfo]) -> None:
     service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
 
-    result = service.start_wavegen(waveform="custom")
+    result = service.start_wavegen(waveform="noise")
 
     assert result.ok is False
     assert result.error == (
-        "waveform must be one of ['sine', 'square', 'triangle', 'dc']; got 'custom'"
+        "waveform must be one of ['sine', 'square', 'triangle', 'dc', 'custom']; got 'noise'"
     )
 
 
@@ -509,6 +531,108 @@ def test_start_wavegen_rejects_out_of_range_duty_cycle(
 
     assert result.ok is False
     assert result.error == "duty_cycle_percent must be between 0.0 and 100.0"
+
+
+def test_start_wavegen_rejects_custom_without_samples(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(waveform="custom", sample_rate_hz=1000.0)
+
+    assert result.ok is False
+    assert result.error == "samples are required for custom waveform"
+
+
+def test_start_wavegen_rejects_custom_without_sample_rate(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(waveform="custom", samples=[0.0, 1.0])
+
+    assert result.ok is False
+    assert result.error == "sample_rate_hz is required for custom waveform"
+
+
+def test_start_wavegen_rejects_non_finite_custom_sample(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(
+        waveform="custom",
+        samples=[0.0, float("nan")],
+        sample_rate_hz=1000.0,
+    )
+
+    assert result.ok is False
+    assert result.error == "samples must be finite"
+
+
+def test_start_wavegen_rejects_out_of_range_custom_sample(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(
+        waveform="custom",
+        samples=[0.0, 1.1],
+        sample_rate_hz=1000.0,
+    )
+
+    assert result.ok is False
+    assert result.error == "samples must be between -1.0 and 1.0"
+
+
+def test_start_wavegen_rejects_custom_sample_count(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(
+        waveform="custom",
+        samples=[0.0],
+        sample_rate_hz=1000.0,
+    )
+
+    assert result.ok is False
+    assert result.error == "samples length must be between 2 and 4096"
+
+
+def test_start_wavegen_rejects_custom_frequency_out_of_range(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(
+        waveform="custom",
+        samples=[0.0, 1.0],
+        sample_rate_hz=0.1,
+    )
+
+    assert result.ok is False
+    assert result.error == "sample_rate_hz / len(samples) must be between 0.1 and 10000000.0"
+
+
+def test_start_wavegen_rejects_samples_for_builtin_waveform(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(waveform="sine", samples=[0.0, 1.0])
+
+    assert result.ok is False
+    assert result.error == "samples are only supported for custom waveform"
+
+
+def test_start_wavegen_rejects_sample_rate_for_builtin_waveform(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_wavegen(waveform="sine", sample_rate_hz=1000.0)
+
+    assert result.ok is False
+    assert result.error == "sample_rate_hz is only supported for custom waveform"
 
 
 def test_stop_wavegen_returns_last_config(sample_devices: list[DeviceInfo]) -> None:

@@ -183,10 +183,12 @@ class FakeDwfAdapter(DwfAdapter):
             offset_max_v=5.0,
             duty_cycle_min_percent=0.0,
             duty_cycle_max_percent=100.0,
+            custom_sample_count_min=2,
+            custom_sample_count_max=4096,
         )
         return WavegenLimits(
             supported_channels=[1, 2],
-            supported_waveforms=["sine", "square", "triangle", "dc"],
+            supported_waveforms=["sine", "square", "triangle", "dc", "custom"],
             default_waveform="sine",
             default_frequency_hz=1000.0,
             default_amplitude_v=1.0,
