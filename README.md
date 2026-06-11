@@ -10,6 +10,7 @@ This project exposes a small local instrument-control tool surface for MCP clien
 - Capture analog input waveforms with optional analog edge triggers.
 - Measure core voltage statistics from one analog input channel.
 - Drive Wavegen outputs: sine, square, triangle, DC, and bounded custom samples.
+- Read and drive static digital I/O pins.
 
 Analog waveform capture is supported for small local captures.
 
@@ -51,7 +52,7 @@ AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
 
 The fake backend is deterministic and for demos only. It reports one fake Analog Discovery 3 device,
 fixed voltage readings for channels 1 and 2, and simulated waveform capture payloads for client
-prototyping. It also simulates Wavegen output state for tests.
+prototyping. It also simulates Wavegen output state and static digital I/O state for tests.
 
 ## MCP Client Configuration
 
@@ -215,6 +216,49 @@ Stops Wavegen output on one channel. The fake backend preserves the last config 
 
 Returns Wavegen state, running flag, and current config when available.
 
+### Digital I/O
+
+Digital pin numbers are zero-based and match WaveForms labels: public pin `0` is `DIO0`.
+
+### `get_digital_io_limits`
+
+Returns static digital I/O pin capabilities for the selected device.
+
+Outputs include:
+
+- `supported_input_pins`
+- `supported_output_pins`
+- `input_mask`
+- `output_enable_mask`
+- `device`
+
+### `read_digital_inputs`
+
+Reads static digital input pin values.
+
+Inputs:
+
+- `pins`: optional list of zero-based DIO pins; default reads all supported input pins
+- `device_index`: optional zero-based device index
+- `serial_number`: optional device serial number
+
+Outputs include selected `pins`, string-keyed boolean `values`, raw `input_mask`, and `device`.
+
+### `write_digital_outputs`
+
+Writes static digital output pin values.
+
+Inputs:
+
+- `pins`: list of zero-based output pins
+- `values`: same-length list of booleans
+- `preserve_existing`: keep unselected output state when true; default `true`
+- `device_index`: optional zero-based device index
+- `serial_number`: optional device serial number
+
+Outputs include selected `pins`, string-keyed boolean `values`, `output_enable_mask`,
+`output_mask`, and `device`.
+
 ## Development
 
 ```bash
@@ -248,6 +292,6 @@ The staged development plan lives in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Safety
 
-Wavegen tools drive hardware outputs, including arbitrary custom buffers. Verify wiring, voltage range, load, and common ground before starting output.
+Wavegen and digital output tools drive hardware outputs. Verify wiring, voltage range, load, and common ground before starting output.
 
 Reading and capturing analog input still opens and configures the selected WaveForms device as required by the SDK. Check input voltage limits before connecting any circuit to Analog Discovery hardware.

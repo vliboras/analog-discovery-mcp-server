@@ -8,6 +8,9 @@ from analog_discovery_mcp.models import (
     AnalogInputStatus,
     AnalogTriggerConfig,
     DeviceInfo,
+    DigitalInputRead,
+    DigitalIOLimits,
+    DigitalOutputStatus,
     WavegenConfig,
     WavegenLimits,
     WavegenStatus,
@@ -39,6 +42,21 @@ class DwfAdapter(Protocol):
 
     def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
         """Return analog input capability and current status metadata."""
+
+    def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
+        """Return static digital I/O pin capabilities."""
+
+    def read_digital_inputs(self, device_index: int, pins: list[int]) -> DigitalInputRead:
+        """Read static digital input pin values."""
+
+    def write_digital_outputs(
+        self,
+        device_index: int,
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+    ) -> DigitalOutputStatus:
+        """Write static digital output pin values."""
 
     def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
         """Return Wavegen limits for the selected device."""

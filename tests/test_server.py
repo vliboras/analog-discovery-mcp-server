@@ -6,7 +6,7 @@ from typing import Any, TypeVar, get_type_hints
 from analog_discovery_mcp.models import DeviceInfo
 from analog_discovery_mcp.server import create_mcp_server, register_tools
 from analog_discovery_mcp.service import AnalogDiscoveryService
-from tests.conftest import FakeDwfAdapter
+from tests.conftest import RecordingDwfAdapter
 
 F = TypeVar("F", bound=Callable[..., object])
 
@@ -34,7 +34,7 @@ class RecordingMcp:
 
 def test_registers_expected_tools() -> None:
     mcp = RecordingMcp()
-    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(), environ={})
 
     register_tools(mcp, service)
 
@@ -42,13 +42,16 @@ def test_registers_expected_tools() -> None:
         "capture_analog_waveform",
         "get_analog_capture_limits",
         "get_analog_input_status",
+        "get_digital_io_limits",
         "get_wavegen_limits",
         "get_waveforms_version",
         "list_devices",
         "measure_analog_waveform",
+        "read_digital_inputs",
         "read_analog_voltage",
         "start_wavegen",
         "stop_wavegen",
+        "write_digital_outputs",
         "get_wavegen_status",
     }
 
@@ -69,7 +72,7 @@ def test_create_server_uses_fake_backend_from_env(monkeypatch: Any) -> None:
 
 def test_registered_tools_call_service() -> None:
     mcp = RecordingMcp()
-    adapter = FakeDwfAdapter(
+    adapter = RecordingDwfAdapter(
         devices=[DeviceInfo(index=0, name="Analog Discovery 3", serial_number="SN:AD3")],
         read_voltage=0.75,
     )
@@ -82,6 +85,9 @@ def test_registered_tools_call_service() -> None:
     voltage = mcp.tools["read_analog_voltage"](channel=1)
     measurement = mcp.tools["measure_analog_waveform"](channel=1, sample_count=4)
     status = mcp.tools["get_analog_input_status"]()
+    digital_limits = mcp.tools["get_digital_io_limits"]()
+    digital_read = mcp.tools["read_digital_inputs"](pins=[0, 1])
+    digital_write = mcp.tools["write_digital_outputs"](pins=[0, 1], values=[True, False])
     wavegen_limits = mcp.tools["get_wavegen_limits"]()
     wavegen_status = mcp.tools["start_wavegen"](channel=1, waveform="square")
 
@@ -108,6 +114,15 @@ def test_registered_tools_call_service() -> None:
     assert isinstance(status, dict)
     assert status["ok"] is True
     assert status["data"]["channel_count"] == 2
+    assert isinstance(digital_limits, dict)
+    assert digital_limits["ok"] is True
+    assert digital_limits["data"]["supported_input_pins"] == list(range(16))
+    assert isinstance(digital_read, dict)
+    assert digital_read["ok"] is True
+    assert digital_read["data"]["values"] == {"0": False, "1": False}
+    assert isinstance(digital_write, dict)
+    assert digital_write["ok"] is True
+    assert digital_write["data"]["values"] == {"0": True, "1": False}
     assert isinstance(wavegen_limits, dict)
     assert wavegen_limits["ok"] is True
     assert wavegen_limits["data"]["supported_channels"] == [1, 2]
@@ -118,7 +133,7 @@ def test_registered_tools_call_service() -> None:
 
 def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     mcp = RecordingMcp()
-    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(), environ={})
 
     register_tools(mcp, service)
 
@@ -138,3 +153,11 @@ def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     assert wavegen_annotations["frequency_hz"] is float
     assert wavegen_annotations["samples"] == list[float] | None
     assert wavegen_annotations["sample_rate_hz"] == float | None
+
+    digital_read_annotations = get_type_hints(mcp.tools["read_digital_inputs"])
+    assert digital_read_annotations["pins"] == list[int] | None
+
+    digital_write_annotations = get_type_hints(mcp.tools["write_digital_outputs"])
+    assert digital_write_annotations["pins"] == list[int]
+    assert digital_write_annotations["values"] == list[bool]
+    assert digital_write_annotations["preserve_existing"] is bool

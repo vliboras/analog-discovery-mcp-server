@@ -110,6 +110,54 @@ def test_fake_adapter_reports_analog_input_status() -> None:
     assert result.data["channel_ranges"] == {"1": 5.0, "2": 5.0}
 
 
+def test_fake_adapter_reports_digital_io_limits() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    result = service.get_digital_io_limits()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["supported_input_pins"] == list(range(16))
+    assert result.data["supported_output_pins"] == list(range(16))
+    assert result.data["input_mask"] == 0xFFFF
+    assert result.data["output_enable_mask"] == 0xFFFF
+
+
+def test_fake_adapter_tracks_digital_io_state() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    written = service.write_digital_outputs(pins=[0, 3], values=[True, False])
+    read = service.read_digital_inputs(pins=[0, 3])
+
+    assert written.ok is True
+    assert written.data is not None
+    assert written.data["output_enable_mask"] == 0b1001
+    assert written.data["output_mask"] == 0b0001
+    assert read.ok is True
+    assert read.data is not None
+    assert read.data["values"] == {"0": True, "3": False}
+
+
+def test_fake_adapter_replaces_digital_io_state() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    service.write_digital_outputs(pins=[0], values=[True])
+    written = service.write_digital_outputs(
+        pins=[1],
+        values=[True],
+        preserve_existing=False,
+    )
+    read = service.read_digital_inputs(pins=[0, 1])
+
+    assert written.ok is True
+    assert written.data is not None
+    assert written.data["output_enable_mask"] == 0b10
+    assert written.data["output_mask"] == 0b10
+    assert read.ok is True
+    assert read.data is not None
+    assert read.data["values"] == {"0": False, "1": True}
+
+
 def test_fake_adapter_reports_wavegen_limits() -> None:
     service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
 

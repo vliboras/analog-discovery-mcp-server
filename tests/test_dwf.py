@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ctypes import c_byte, c_double, c_int
+from ctypes import c_byte, c_double, c_int, c_uint
 from typing import Any, cast
 
 import pytest
@@ -15,6 +15,12 @@ class FakeWaveFormsSdk:
         self.status_values = [2]
         self.fail_on: str | None = None
         self.last_error = "fake sdk failure"
+        self.digital_input_info_mask = 0xFFFF
+        self.digital_output_enable_info_mask = 0xFFFF
+        self.digital_output_info_mask = 0xFFFF
+        self.digital_input_status_mask = 0
+        self.digital_output_enable_mask = 0
+        self.digital_output_mask = 0
 
     def FDwfDeviceOpen(self, device_index: object, handle: object) -> int:
         self._record("FDwfDeviceOpen", device_index)
@@ -395,6 +401,54 @@ class FakeWaveFormsSdk:
         self._set_value(status, 3)
         return self._result("FDwfAnalogOutStatus")
 
+    def FDwfDigitalIOInputInfo(self, handle: object, input_mask: object) -> int:
+        self._record("FDwfDigitalIOInputInfo", handle)
+        self._set_value(input_mask, self.digital_input_info_mask)
+        return self._result("FDwfDigitalIOInputInfo")
+
+    def FDwfDigitalIOOutputEnableInfo(self, handle: object, output_enable_mask: object) -> int:
+        self._record("FDwfDigitalIOOutputEnableInfo", handle)
+        self._set_value(output_enable_mask, self.digital_output_enable_info_mask)
+        return self._result("FDwfDigitalIOOutputEnableInfo")
+
+    def FDwfDigitalIOOutputInfo(self, handle: object, output_mask: object) -> int:
+        self._record("FDwfDigitalIOOutputInfo", handle)
+        self._set_value(output_mask, self.digital_output_info_mask)
+        return self._result("FDwfDigitalIOOutputInfo")
+
+    def FDwfDigitalIOStatus(self, handle: object) -> int:
+        self._record("FDwfDigitalIOStatus", handle)
+        return self._result("FDwfDigitalIOStatus")
+
+    def FDwfDigitalIOInputStatus(self, handle: object, input_mask: object) -> int:
+        self._record("FDwfDigitalIOInputStatus", handle)
+        self._set_value(input_mask, self.digital_input_status_mask)
+        return self._result("FDwfDigitalIOInputStatus")
+
+    def FDwfDigitalIOOutputEnableGet(self, handle: object, output_enable_mask: object) -> int:
+        self._record("FDwfDigitalIOOutputEnableGet", handle)
+        self._set_value(output_enable_mask, self.digital_output_enable_mask)
+        return self._result("FDwfDigitalIOOutputEnableGet")
+
+    def FDwfDigitalIOOutputGet(self, handle: object, output_mask: object) -> int:
+        self._record("FDwfDigitalIOOutputGet", handle)
+        self._set_value(output_mask, self.digital_output_mask)
+        return self._result("FDwfDigitalIOOutputGet")
+
+    def FDwfDigitalIOOutputEnableSet(self, handle: object, output_enable_mask: object) -> int:
+        self._record("FDwfDigitalIOOutputEnableSet", handle, output_enable_mask)
+        self.digital_output_enable_mask = self._value(output_enable_mask)
+        return self._result("FDwfDigitalIOOutputEnableSet")
+
+    def FDwfDigitalIOOutputSet(self, handle: object, output_mask: object) -> int:
+        self._record("FDwfDigitalIOOutputSet", handle, output_mask)
+        self.digital_output_mask = self._value(output_mask)
+        return self._result("FDwfDigitalIOOutputSet")
+
+    def FDwfDigitalIOConfigure(self, handle: object) -> int:
+        self._record("FDwfDigitalIOConfigure", handle)
+        return self._result("FDwfDigitalIOConfigure")
+
     def FDwfAnalogOutNodeFunctionGet(
         self,
         handle: object,
@@ -467,6 +521,8 @@ class FakeWaveFormsSdk:
         if isinstance(value, c_int):
             return int(value.value)
         if isinstance(value, c_byte):
+            return int(value.value)
+        if isinstance(value, c_uint):
             return int(value.value)
         if isinstance(value, c_double):
             return int(value.value)
@@ -631,6 +687,106 @@ def test_real_wavegen_limits_query_opens_and_closes_device() -> None:
     assert "FDwfAnalogOutCount" in _call_names(sdk)
     assert "FDwfAnalogOutNodeFunctionInfo" in _call_names(sdk)
     assert "FDwfAnalogOutNodeDataInfo" in _call_names(sdk)
+
+
+def test_real_digital_io_limits_query_opens_and_closes_device() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.digital_input_info_mask = 0b1011
+    sdk.digital_output_enable_info_mask = 0b1111
+    sdk.digital_output_info_mask = 0b0101
+    adapter = _adapter_with_sdk(sdk)
+
+    limits = adapter.get_digital_io_limits(device_index=0)
+
+    assert limits.supported_input_pins == [0, 1, 3]
+    assert limits.supported_output_pins == [0, 2]
+    assert limits.input_mask == 0b1011
+    assert limits.output_enable_mask == 0b0101
+    assert _call_names(sdk) == [
+        "FDwfDeviceOpen",
+        "FDwfDigitalIOInputInfo",
+        "FDwfDigitalIOOutputEnableInfo",
+        "FDwfDigitalIOOutputInfo",
+        "FDwfDeviceClose",
+    ]
+
+
+def test_real_digital_input_read_returns_selected_pin_values() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.digital_input_status_mask = 0b1010
+    adapter = _adapter_with_sdk(sdk)
+
+    read = adapter.read_digital_inputs(device_index=0, pins=[0, 1, 3])
+
+    assert read.pins == [0, 1, 3]
+    assert read.values == {"0": False, "1": True, "3": True}
+    assert read.input_mask == 0b1010
+    assert _call_names(sdk) == [
+        "FDwfDeviceOpen",
+        "FDwfDigitalIOStatus",
+        "FDwfDigitalIOInputStatus",
+        "FDwfDeviceClose",
+    ]
+
+
+def test_real_digital_output_write_preserves_existing_state() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.digital_output_enable_mask = 0b1000
+    sdk.digital_output_mask = 0b1000
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.write_digital_outputs(
+        device_index=0,
+        pins=[0, 3],
+        values=[True, False],
+    )
+
+    assert status.pins == [0, 3]
+    assert status.values == {"0": True, "3": False}
+    assert status.output_enable_mask == 0b1001
+    assert status.output_mask == 0b0001
+    assert sdk.digital_output_enable_mask == 0b1001
+    assert sdk.digital_output_mask == 0b0001
+    assert _call_names(sdk) == [
+        "FDwfDeviceOpen",
+        "FDwfDigitalIOOutputEnableGet",
+        "FDwfDigitalIOOutputGet",
+        "FDwfDigitalIOOutputEnableSet",
+        "FDwfDigitalIOOutputSet",
+        "FDwfDigitalIOConfigure",
+        "FDwfDeviceClose",
+    ]
+
+
+def test_real_digital_output_write_can_replace_existing_state() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.digital_output_enable_mask = 0b1000
+    sdk.digital_output_mask = 0b1000
+    adapter = _adapter_with_sdk(sdk)
+
+    status = adapter.write_digital_outputs(
+        device_index=0,
+        pins=[1],
+        values=[True],
+        preserve_existing=False,
+    )
+
+    assert status.output_enable_mask == 0b0010
+    assert status.output_mask == 0b0010
+    assert sdk.digital_output_enable_mask == 0b0010
+    assert sdk.digital_output_mask == 0b0010
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_digital_io_closes_device_when_sdk_call_fails() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.fail_on = "FDwfDigitalIOOutputSet"
+    adapter = _adapter_with_sdk(sdk)
+
+    with pytest.raises(DwfError, match="fake sdk failure"):
+        adapter.write_digital_outputs(device_index=0, pins=[0], values=[True])
+
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 
 def test_real_wavegen_start_configures_output() -> None:

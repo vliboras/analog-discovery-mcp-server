@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 from analog_discovery_mcp.dwf import DwfError
-from analog_discovery_mcp.models import AnalogCaptureLimits, DeviceInfo
+from analog_discovery_mcp.models import AnalogCaptureLimits, DeviceInfo, DigitalIOLimits
 from analog_discovery_mcp.service import (
     ENV_DEVICE_INDEX,
     ENV_DEVICE_SERIAL,
     AnalogDiscoveryService,
 )
-from tests.conftest import FakeDwfAdapter
+from tests.conftest import RecordingDwfAdapter
 
 
 def test_get_waveforms_version_success() -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(version="3.24.3"), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(version="3.24.3"), environ={})
 
     result = service.get_waveforms_version()
 
@@ -20,7 +20,10 @@ def test_get_waveforms_version_success() -> None:
 
 
 def test_get_waveforms_version_reports_sdk_error(sdk_missing_error: DwfError) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(fail_version=sdk_missing_error), environ={})
+    service = AnalogDiscoveryService(
+        RecordingDwfAdapter(fail_version=sdk_missing_error),
+        environ={},
+    )
 
     result = service.get_waveforms_version()
 
@@ -29,7 +32,7 @@ def test_get_waveforms_version_reports_sdk_error(sdk_missing_error: DwfError) ->
 
 
 def test_list_devices_zero() -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=[]), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=[]), environ={})
 
     result = service.list_devices()
 
@@ -38,7 +41,7 @@ def test_list_devices_zero() -> None:
 
 
 def test_list_devices_multiple(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.list_devices()
 
@@ -62,7 +65,7 @@ def test_list_devices_multiple(sample_devices: list[DeviceInfo]) -> None:
 
 
 def test_read_voltage_selects_explicit_index(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices, read_voltage=2.5)
+    adapter = RecordingDwfAdapter(devices=sample_devices, read_voltage=2.5)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.read_analog_voltage(channel=2, device_index=1)
@@ -77,7 +80,7 @@ def test_read_voltage_selects_explicit_index(sample_devices: list[DeviceInfo]) -
 
 
 def test_read_voltage_selects_explicit_serial(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.read_analog_voltage(channel=1, serial_number="SN:AD3")
@@ -87,7 +90,7 @@ def test_read_voltage_selects_explicit_serial(sample_devices: list[DeviceInfo]) 
 
 
 def test_read_voltage_uses_env_index(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={ENV_DEVICE_INDEX: "1"})
 
     result = service.read_analog_voltage(channel=1)
@@ -97,7 +100,7 @@ def test_read_voltage_uses_env_index(sample_devices: list[DeviceInfo]) -> None:
 
 
 def test_read_voltage_uses_env_serial(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={ENV_DEVICE_SERIAL: "SN:AD3"})
 
     result = service.read_analog_voltage(channel=1)
@@ -107,7 +110,7 @@ def test_read_voltage_uses_env_serial(sample_devices: list[DeviceInfo]) -> None:
 
 
 def test_read_voltage_defaults_to_first_device(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.read_analog_voltage(channel=1)
@@ -117,7 +120,7 @@ def test_read_voltage_defaults_to_first_device(sample_devices: list[DeviceInfo])
 
 
 def test_read_voltage_rejects_invalid_channel(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.read_analog_voltage(channel=3)
@@ -128,7 +131,7 @@ def test_read_voltage_rejects_invalid_channel(sample_devices: list[DeviceInfo]) 
 
 
 def test_read_voltage_rejects_conflicting_tool_selection(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.read_analog_voltage(channel=1, device_index=0, serial_number="SN:AD2")
 
@@ -138,7 +141,7 @@ def test_read_voltage_rejects_conflicting_tool_selection(sample_devices: list[De
 
 def test_read_voltage_rejects_conflicting_env_selection(sample_devices: list[DeviceInfo]) -> None:
     service = AnalogDiscoveryService(
-        FakeDwfAdapter(devices=sample_devices),
+        RecordingDwfAdapter(devices=sample_devices),
         environ={ENV_DEVICE_INDEX: "0", ENV_DEVICE_SERIAL: "SN:AD2"},
     )
 
@@ -150,7 +153,7 @@ def test_read_voltage_rejects_conflicting_env_selection(sample_devices: list[Dev
 
 def test_read_voltage_rejects_invalid_env_index(sample_devices: list[DeviceInfo]) -> None:
     service = AnalogDiscoveryService(
-        FakeDwfAdapter(devices=sample_devices),
+        RecordingDwfAdapter(devices=sample_devices),
         environ={ENV_DEVICE_INDEX: "first"},
     )
 
@@ -161,7 +164,7 @@ def test_read_voltage_rejects_invalid_env_index(sample_devices: list[DeviceInfo]
 
 
 def test_read_voltage_reports_no_devices() -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=[]), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=[]), environ={})
 
     result = service.read_analog_voltage(channel=1)
 
@@ -170,7 +173,7 @@ def test_read_voltage_reports_no_devices() -> None:
 
 
 def test_read_voltage_reports_missing_serial(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.read_analog_voltage(channel=1, serial_number="missing")
 
@@ -179,7 +182,7 @@ def test_read_voltage_reports_missing_serial(sample_devices: list[DeviceInfo]) -
 
 
 def test_read_voltage_reports_missing_index(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.read_analog_voltage(channel=1, device_index=99)
 
@@ -188,7 +191,7 @@ def test_read_voltage_reports_missing_index(sample_devices: list[DeviceInfo]) ->
 
 
 def test_read_voltage_reports_sdk_read_error(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices, fail_read=DwfError("read failed"))
+    adapter = RecordingDwfAdapter(devices=sample_devices, fail_read=DwfError("read failed"))
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.read_analog_voltage(channel=1)
@@ -199,7 +202,7 @@ def test_read_voltage_reports_sdk_read_error(sample_devices: list[DeviceInfo]) -
 
 
 def test_capture_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.capture_analog_waveform()
@@ -214,7 +217,7 @@ def test_capture_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
 
 
 def test_capture_passes_normalized_trigger_config(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.capture_analog_waveform(
@@ -240,7 +243,7 @@ def test_capture_passes_normalized_trigger_config(sample_devices: list[DeviceInf
 
 
 def test_capture_rejects_invalid_trigger_edge(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(trigger_enabled=True, trigger_edge="both")
 
@@ -251,7 +254,7 @@ def test_capture_rejects_invalid_trigger_edge(sample_devices: list[DeviceInfo]) 
 def test_capture_rejects_trigger_channel_outside_capture(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(
         channels=[1],
@@ -264,7 +267,7 @@ def test_capture_rejects_trigger_channel_outside_capture(
 
 
 def test_capture_rejects_invalid_trigger_hysteresis(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(
         trigger_enabled=True,
@@ -276,7 +279,7 @@ def test_capture_rejects_invalid_trigger_hysteresis(sample_devices: list[DeviceI
 
 
 def test_capture_rejects_invalid_trigger_timeout(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(
         trigger_enabled=True,
@@ -288,7 +291,7 @@ def test_capture_rejects_invalid_trigger_timeout(sample_devices: list[DeviceInfo
 
 
 def test_capture_rejects_invalid_trigger_position(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(
         trigger_enabled=True,
@@ -302,7 +305,7 @@ def test_capture_rejects_invalid_trigger_position(sample_devices: list[DeviceInf
 
 
 def test_capture_rejects_empty_channels(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(channels=[])
 
@@ -311,7 +314,7 @@ def test_capture_rejects_empty_channels(sample_devices: list[DeviceInfo]) -> Non
 
 
 def test_capture_rejects_duplicate_channels(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(channels=[1, 1])
 
@@ -320,7 +323,7 @@ def test_capture_rejects_duplicate_channels(sample_devices: list[DeviceInfo]) ->
 
 
 def test_capture_rejects_unsupported_channels(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(channels=[3])
 
@@ -329,7 +332,7 @@ def test_capture_rejects_unsupported_channels(sample_devices: list[DeviceInfo]) 
 
 
 def test_capture_rejects_invalid_sample_rate(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(sample_rate_hz=0)
 
@@ -338,7 +341,7 @@ def test_capture_rejects_invalid_sample_rate(sample_devices: list[DeviceInfo]) -
 
 
 def test_capture_rejects_invalid_sample_count(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.capture_analog_waveform(sample_count=32_769)
 
@@ -347,7 +350,7 @@ def test_capture_rejects_invalid_sample_count(sample_devices: list[DeviceInfo]) 
 
 
 def test_capture_rejects_excessive_total_samples(sample_devices: list[DeviceInfo]) -> None:
-    class LowTotalLimitAdapter(FakeDwfAdapter):
+    class LowTotalLimitAdapter(RecordingDwfAdapter):
         def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
             return AnalogCaptureLimits(
                 supported_channels=[1, 2],
@@ -368,7 +371,7 @@ def test_capture_rejects_excessive_total_samples(sample_devices: list[DeviceInfo
 def test_measure_analog_waveform_returns_core_stats_without_samples(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.measure_analog_waveform(channel=1, sample_count=4)
 
@@ -386,7 +389,7 @@ def test_measure_analog_waveform_returns_core_stats_without_samples(
 def test_get_analog_input_status_returns_status_shape(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.get_analog_input_status()
 
@@ -400,7 +403,7 @@ def test_get_analog_input_status_returns_status_shape(
 
 
 def test_get_wavegen_limits_returns_status_shape(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.get_wavegen_limits()
 
@@ -413,8 +416,180 @@ def test_get_wavegen_limits_returns_status_shape(sample_devices: list[DeviceInfo
     assert result.data["device"]["serial_number"] == "SN:AD2"
 
 
+def test_get_digital_io_limits_returns_status_shape(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.get_digital_io_limits()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["supported_input_pins"] == list(range(16))
+    assert result.data["supported_output_pins"] == list(range(16))
+    assert result.data["input_mask"] == 0xFFFF
+    assert result.data["output_enable_mask"] == 0xFFFF
+    assert result.data["device"]["serial_number"] == "SN:AD2"
+
+
+def test_read_digital_inputs_uses_default_supported_pins(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    adapter = RecordingDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    result = service.read_digital_inputs()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["pins"] == list(range(16))
+    assert result.data["values"]["0"] is False
+    assert adapter.digital_calls == [
+        ("limits", 0, None),
+        ("read", 0, list(range(16))),
+    ]
+
+
+def test_read_digital_inputs_rejects_duplicate_pins(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.read_digital_inputs(pins=[0, 0])
+
+    assert result.ok is False
+    assert result.error == "pins must not contain duplicates"
+
+
+def test_read_digital_inputs_rejects_unsupported_pins(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.read_digital_inputs(pins=[16])
+
+    assert result.ok is False
+    expected_error = (
+        "pins must only contain supported pins "
+        "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]; got [16]"
+    )
+    assert result.error == expected_error
+
+
+def test_write_digital_outputs_updates_selected_pins(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    adapter = RecordingDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    result = service.write_digital_outputs(pins=[0, 2], values=[True, False])
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["pins"] == [0, 2]
+    assert result.data["values"] == {"0": True, "2": False}
+    assert result.data["output_enable_mask"] == 0b101
+    assert result.data["output_mask"] == 0b001
+    assert adapter.digital_calls == [
+        ("limits", 0, None),
+        ("write", 0, ([0, 2], [True, False], True)),
+    ]
+
+
+def test_write_digital_outputs_preserves_existing_state(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    adapter = RecordingDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    first = service.write_digital_outputs(pins=[0], values=[True])
+    second = service.write_digital_outputs(pins=[1], values=[True])
+
+    assert first.ok is True
+    assert second.ok is True
+    assert second.data is not None
+    assert second.data["output_enable_mask"] == 0b11
+    assert second.data["output_mask"] == 0b11
+
+
+def test_write_digital_outputs_can_replace_existing_state(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    adapter = RecordingDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    service.write_digital_outputs(pins=[0], values=[True])
+    result = service.write_digital_outputs(
+        pins=[1],
+        values=[True],
+        preserve_existing=False,
+    )
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["output_enable_mask"] == 0b10
+    assert result.data["output_mask"] == 0b10
+
+
+def test_write_digital_outputs_rejects_empty_pins(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.write_digital_outputs(pins=[], values=[])
+
+    assert result.ok is False
+    assert result.error == "pins must not be empty"
+
+
+def test_write_digital_outputs_rejects_value_length_mismatch(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.write_digital_outputs(pins=[0, 1], values=[True])
+
+    assert result.ok is False
+    assert result.error == "values length must match pins length"
+
+
+def test_write_digital_outputs_rejects_non_boolean_values(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.write_digital_outputs(pins=[0], values=[1])  # type: ignore[list-item]
+
+    assert result.ok is False
+    assert result.error == "values must contain booleans"
+
+
+def test_digital_io_reports_sdk_error(sample_devices: list[DeviceInfo]) -> None:
+    service = AnalogDiscoveryService(
+        RecordingDwfAdapter(devices=sample_devices, fail_digital_limits=DwfError("digital failed")),
+        environ={},
+    )
+
+    result = service.get_digital_io_limits()
+
+    assert result.ok is False
+    assert result.error == "digital failed"
+
+
+def test_digital_io_rejects_unsupported_output_pin(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    class LimitedDigitalAdapter(RecordingDwfAdapter):
+        def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
+            return DigitalIOLimits(
+                supported_input_pins=[0, 1],
+                supported_output_pins=[0],
+                input_mask=0b11,
+                output_enable_mask=0b01,
+            )
+
+    service = AnalogDiscoveryService(LimitedDigitalAdapter(devices=sample_devices), environ={})
+
+    result = service.write_digital_outputs(pins=[1], values=[True])
+
+    assert result.ok is False
+    assert result.error == "pins must only contain supported pins [0]; got [1]"
+
+
 def test_start_wavegen_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
-    adapter = FakeDwfAdapter(devices=sample_devices)
+    adapter = RecordingDwfAdapter(devices=sample_devices)
     service = AnalogDiscoveryService(adapter, environ={})
 
     result = service.start_wavegen()
@@ -434,7 +609,7 @@ def test_start_wavegen_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
 
 
 def test_start_wavegen_normalizes_dc_amplitude(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(waveform="DC", offset_v=1.25, amplitude_v=3.0)
 
@@ -446,7 +621,7 @@ def test_start_wavegen_normalizes_dc_amplitude(sample_devices: list[DeviceInfo])
 
 
 def test_start_wavegen_accepts_custom_samples(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(
         waveform="custom",
@@ -467,7 +642,7 @@ def test_start_wavegen_accepts_custom_samples(sample_devices: list[DeviceInfo]) 
 
 
 def test_start_wavegen_rejects_invalid_channel(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(channel=3)
 
@@ -476,7 +651,7 @@ def test_start_wavegen_rejects_invalid_channel(sample_devices: list[DeviceInfo])
 
 
 def test_start_wavegen_rejects_invalid_waveform(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(waveform="noise")
 
@@ -487,7 +662,7 @@ def test_start_wavegen_rejects_invalid_waveform(sample_devices: list[DeviceInfo]
 
 
 def test_start_wavegen_rejects_non_finite_value(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(frequency_hz=float("nan"))
 
@@ -496,7 +671,7 @@ def test_start_wavegen_rejects_non_finite_value(sample_devices: list[DeviceInfo]
 
 
 def test_start_wavegen_rejects_out_of_range_frequency(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(frequency_hz=0.0)
 
@@ -505,7 +680,7 @@ def test_start_wavegen_rejects_out_of_range_frequency(sample_devices: list[Devic
 
 
 def test_start_wavegen_rejects_out_of_range_amplitude(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(amplitude_v=6.0)
 
@@ -514,7 +689,7 @@ def test_start_wavegen_rejects_out_of_range_amplitude(sample_devices: list[Devic
 
 
 def test_start_wavegen_rejects_out_of_range_offset(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(offset_v=6.0)
 
@@ -525,7 +700,7 @@ def test_start_wavegen_rejects_out_of_range_offset(sample_devices: list[DeviceIn
 def test_start_wavegen_rejects_out_of_range_duty_cycle(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(duty_cycle_percent=101.0)
 
@@ -534,7 +709,7 @@ def test_start_wavegen_rejects_out_of_range_duty_cycle(
 
 
 def test_start_wavegen_rejects_custom_without_samples(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(waveform="custom", sample_rate_hz=1000.0)
 
@@ -545,7 +720,7 @@ def test_start_wavegen_rejects_custom_without_samples(sample_devices: list[Devic
 def test_start_wavegen_rejects_custom_without_sample_rate(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(waveform="custom", samples=[0.0, 1.0])
 
@@ -556,7 +731,7 @@ def test_start_wavegen_rejects_custom_without_sample_rate(
 def test_start_wavegen_rejects_non_finite_custom_sample(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(
         waveform="custom",
@@ -571,7 +746,7 @@ def test_start_wavegen_rejects_non_finite_custom_sample(
 def test_start_wavegen_rejects_out_of_range_custom_sample(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(
         waveform="custom",
@@ -586,7 +761,7 @@ def test_start_wavegen_rejects_out_of_range_custom_sample(
 def test_start_wavegen_rejects_custom_sample_count(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(
         waveform="custom",
@@ -601,7 +776,7 @@ def test_start_wavegen_rejects_custom_sample_count(
 def test_start_wavegen_rejects_custom_frequency_out_of_range(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(
         waveform="custom",
@@ -616,7 +791,7 @@ def test_start_wavegen_rejects_custom_frequency_out_of_range(
 def test_start_wavegen_rejects_samples_for_builtin_waveform(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(waveform="sine", samples=[0.0, 1.0])
 
@@ -627,7 +802,7 @@ def test_start_wavegen_rejects_samples_for_builtin_waveform(
 def test_start_wavegen_rejects_sample_rate_for_builtin_waveform(
     sample_devices: list[DeviceInfo],
 ) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     result = service.start_wavegen(waveform="sine", sample_rate_hz=1000.0)
 
@@ -636,7 +811,7 @@ def test_start_wavegen_rejects_sample_rate_for_builtin_waveform(
 
 
 def test_stop_wavegen_returns_last_config(sample_devices: list[DeviceInfo]) -> None:
-    service = AnalogDiscoveryService(FakeDwfAdapter(devices=sample_devices), environ={})
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 
     service.start_wavegen(channel=2, waveform="triangle")
     result = service.stop_wavegen(channel=2)

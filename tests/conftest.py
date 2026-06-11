@@ -13,6 +13,9 @@ from analog_discovery_mcp.models import (
     AnalogStatusTime,
     AnalogTriggerConfig,
     DeviceInfo,
+    DigitalInputRead,
+    DigitalIOLimits,
+    DigitalOutputStatus,
     WavegenChannelLimits,
     WavegenConfig,
     WavegenLimits,
@@ -76,7 +79,7 @@ def _stand_satisfies(selected_stand: str, required_stand: str) -> bool:
     return HARDWARE_STAND_ORDER[selected_stand] >= HARDWARE_STAND_ORDER[required_stand]
 
 
-class FakeDwfAdapter(DwfAdapter):
+class RecordingDwfAdapter(DwfAdapter):
     def __init__(
         self,
         devices: list[DeviceInfo] | None = None,
@@ -85,6 +88,9 @@ class FakeDwfAdapter(DwfAdapter):
         fail_version: Exception | None = None,
         fail_list: Exception | None = None,
         fail_read: Exception | None = None,
+        fail_digital_limits: Exception | None = None,
+        fail_digital_read: Exception | None = None,
+        fail_digital_write: Exception | None = None,
     ) -> None:
         self.devices = devices or []
         self.version = version
@@ -92,11 +98,17 @@ class FakeDwfAdapter(DwfAdapter):
         self.fail_version = fail_version
         self.fail_list = fail_list
         self.fail_read = fail_read
+        self.fail_digital_limits = fail_digital_limits
+        self.fail_digital_read = fail_digital_read
+        self.fail_digital_write = fail_digital_write
         self.read_calls: list[tuple[int, int]] = []
         self.capture_calls: list[
             tuple[int, list[int], float, int, AnalogTriggerConfig | None]
         ] = []
         self.wavegen_calls: list[tuple[str, int, object]] = []
+        self.digital_calls: list[tuple[str, int, object]] = []
+        self.digital_output_enable_mask = 0
+        self.digital_output_mask = 0
         self.wavegen_state: dict[int, WavegenStatus] = {
             1: WavegenStatus(channel=1, state=0, running=False),
             2: WavegenStatus(channel=2, state=0, running=False),
@@ -171,6 +183,55 @@ class FakeDwfAdapter(DwfAdapter):
             channel_ranges={"1": 5.0, "2": 5.0},
             channel_offsets={"1": 0.0, "2": 0.0},
             state=None,
+        )
+
+    def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
+        self.digital_calls.append(("limits", device_index, None))
+        if self.fail_digital_limits:
+            raise self.fail_digital_limits
+        return DigitalIOLimits(
+            supported_input_pins=list(range(16)),
+            supported_output_pins=list(range(16)),
+            input_mask=0xFFFF,
+            output_enable_mask=0xFFFF,
+        )
+
+    def read_digital_inputs(self, device_index: int, pins: list[int]) -> DigitalInputRead:
+        self.digital_calls.append(("read", device_index, pins))
+        if self.fail_digital_read:
+            raise self.fail_digital_read
+        input_mask = self.digital_output_mask & self.digital_output_enable_mask
+        return DigitalInputRead(
+            pins=pins,
+            values={str(pin): bool(input_mask & (1 << pin)) for pin in pins},
+            input_mask=input_mask,
+        )
+
+    def write_digital_outputs(
+        self,
+        device_index: int,
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+    ) -> DigitalOutputStatus:
+        self.digital_calls.append(
+            ("write", device_index, (pins, values, preserve_existing))
+        )
+        if self.fail_digital_write:
+            raise self.fail_digital_write
+        selected_mask = sum(1 << pin for pin in pins)
+        value_mask = sum(1 << pin for pin, value in zip(pins, values, strict=True) if value)
+        if preserve_existing:
+            self.digital_output_enable_mask |= selected_mask
+            self.digital_output_mask = (self.digital_output_mask & ~selected_mask) | value_mask
+        else:
+            self.digital_output_enable_mask = selected_mask
+            self.digital_output_mask = value_mask
+        return DigitalOutputStatus(
+            pins=pins,
+            values={str(pin): bool(self.digital_output_mask & (1 << pin)) for pin in pins},
+            output_enable_mask=self.digital_output_enable_mask,
+            output_mask=self.digital_output_mask,
         )
 
     def get_wavegen_limits(self, device_index: int) -> WavegenLimits:

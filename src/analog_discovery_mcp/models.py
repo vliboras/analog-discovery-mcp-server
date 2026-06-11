@@ -70,6 +70,29 @@ class AnalogInputStatus:
 
 
 @dataclass(frozen=True)
+class DigitalIOLimits:
+    supported_input_pins: list[int]
+    supported_output_pins: list[int]
+    input_mask: int
+    output_enable_mask: int
+
+
+@dataclass(frozen=True)
+class DigitalInputRead:
+    pins: list[int]
+    values: dict[str, bool]
+    input_mask: int
+
+
+@dataclass(frozen=True)
+class DigitalOutputStatus:
+    pins: list[int]
+    values: dict[str, bool]
+    output_enable_mask: int
+    output_mask: int
+
+
+@dataclass(frozen=True)
 class WavegenChannelLimits:
     frequency_min_hz: float
     frequency_max_hz: float

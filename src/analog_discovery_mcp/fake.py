@@ -9,6 +9,9 @@ from analog_discovery_mcp.models import (
     AnalogStatusTime,
     AnalogTriggerConfig,
     DeviceInfo,
+    DigitalInputRead,
+    DigitalIOLimits,
+    DigitalOutputStatus,
     WavegenChannelLimits,
     WavegenConfig,
     WavegenLimits,
@@ -19,6 +22,8 @@ FAKE_DEFAULT_SAMPLE_RATE_HZ = 1000.0
 FAKE_DEFAULT_SAMPLE_COUNT = 1000
 FAKE_MAX_SAMPLE_COUNT_PER_CHANNEL = 32_768
 FAKE_MAX_TOTAL_RETURNED_SAMPLES = 65_536
+FAKE_DIGITAL_PIN_COUNT = 16
+FAKE_DIGITAL_PIN_MASK = (1 << FAKE_DIGITAL_PIN_COUNT) - 1
 FAKE_CUSTOM_WAVEGEN_SAMPLE_COUNT_MAX = 4096
 FAKE_WAVEGEN_WAVEFORMS = ["sine", "square", "triangle", "dc", "custom"]
 FAKE_WAVEGEN_LIMITS = WavegenChannelLimits(
@@ -49,6 +54,8 @@ class FakeDwfAdapter:
             1: WavegenStatus(channel=1, state=0, running=False),
             2: WavegenStatus(channel=2, state=0, running=False),
         }
+        self._digital_output_enable_mask = 0
+        self._digital_output_mask = 0
 
     def get_version(self) -> str:
         return "fake-0.1.0"
@@ -121,6 +128,50 @@ class FakeDwfAdapter:
             state=None,
         )
 
+    def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
+        self._validate_device_index(device_index)
+        supported_pins = list(range(FAKE_DIGITAL_PIN_COUNT))
+        return DigitalIOLimits(
+            supported_input_pins=supported_pins,
+            supported_output_pins=supported_pins,
+            input_mask=FAKE_DIGITAL_PIN_MASK,
+            output_enable_mask=FAKE_DIGITAL_PIN_MASK,
+        )
+
+    def read_digital_inputs(self, device_index: int, pins: list[int]) -> DigitalInputRead:
+        self._validate_device_index(device_index)
+        input_mask = self._digital_output_mask & self._digital_output_enable_mask
+        return DigitalInputRead(
+            pins=pins,
+            values=_digital_values(input_mask, pins),
+            input_mask=input_mask,
+        )
+
+    def write_digital_outputs(
+        self,
+        device_index: int,
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+    ) -> DigitalOutputStatus:
+        self._validate_device_index(device_index)
+        selected_mask = _pins_to_mask(pins)
+        values_mask = _pin_values_to_mask(pins, values)
+        if preserve_existing:
+            self._digital_output_enable_mask |= selected_mask
+            self._digital_output_mask = (self._digital_output_mask & ~selected_mask) | values_mask
+        else:
+            self._digital_output_enable_mask = selected_mask
+            self._digital_output_mask = values_mask
+        self._digital_output_enable_mask &= FAKE_DIGITAL_PIN_MASK
+        self._digital_output_mask &= FAKE_DIGITAL_PIN_MASK
+        return DigitalOutputStatus(
+            pins=pins,
+            values=_digital_values(self._digital_output_mask, pins),
+            output_enable_mask=self._digital_output_enable_mask,
+            output_mask=self._digital_output_mask,
+        )
+
     def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
         self._validate_device_index(device_index)
         return WavegenLimits(
@@ -179,3 +230,22 @@ def _fake_channel_samples(channel_index: int, sample_count: int) -> list[float]:
     if channel_index == 1:
         return [round(0.5 * math.cos(index / 8.0), 6) for index in range(sample_count)]
     raise ValueError("fake analog channel index must be 0 or 1")
+
+
+def _pins_to_mask(pins: list[int]) -> int:
+    mask = 0
+    for pin in pins:
+        mask |= 1 << pin
+    return mask
+
+
+def _pin_values_to_mask(pins: list[int], values: list[bool]) -> int:
+    mask = 0
+    for pin, value in zip(pins, values, strict=True):
+        if value:
+            mask |= 1 << pin
+    return mask
+
+
+def _digital_values(mask: int, pins: list[int]) -> dict[str, bool]:
+    return {str(pin): bool(mask & (1 << pin)) for pin in pins}

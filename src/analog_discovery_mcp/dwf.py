@@ -20,6 +20,9 @@ from analog_discovery_mcp.models import (
     AnalogStatusTime,
     AnalogTriggerConfig,
     DeviceInfo,
+    DigitalInputRead,
+    DigitalIOLimits,
+    DigitalOutputStatus,
     WavegenChannelLimits,
     WavegenConfig,
     WavegenLimits,
@@ -465,6 +468,87 @@ class CtypesDwfAdapter:
         finally:
             self._dwf.FDwfDeviceClose(handle)
 
+    def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
+        handle = self._open_device(device_index)
+
+        try:
+            input_mask = c_uint()
+            output_enable_mask = c_uint()
+            output_mask = c_uint()
+
+            self._require_ok(self._dwf.FDwfDigitalIOInputInfo(handle, byref(input_mask)))
+            self._require_ok(
+                self._dwf.FDwfDigitalIOOutputEnableInfo(
+                    handle,
+                    byref(output_enable_mask),
+                )
+            )
+            self._require_ok(self._dwf.FDwfDigitalIOOutputInfo(handle, byref(output_mask)))
+
+            supported_output_mask = output_enable_mask.value & output_mask.value
+            return DigitalIOLimits(
+                supported_input_pins=_mask_to_pins(input_mask.value),
+                supported_output_pins=_mask_to_pins(supported_output_mask),
+                input_mask=input_mask.value,
+                output_enable_mask=supported_output_mask,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def read_digital_inputs(self, device_index: int, pins: list[int]) -> DigitalInputRead:
+        handle = self._open_device(device_index)
+
+        try:
+            input_mask = self._read_digital_input_mask(handle)
+            return DigitalInputRead(
+                pins=pins,
+                values=_digital_values(input_mask, pins),
+                input_mask=input_mask,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def write_digital_outputs(
+        self,
+        device_index: int,
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+    ) -> DigitalOutputStatus:
+        handle = self._open_device(device_index)
+
+        try:
+            selected_mask = _pins_to_mask(pins)
+            values_mask = _pin_values_to_mask(pins, values)
+            current_enable_mask = c_uint()
+            current_output_mask = c_uint()
+            self._require_ok(
+                self._dwf.FDwfDigitalIOOutputEnableGet(handle, byref(current_enable_mask))
+            )
+            self._require_ok(self._dwf.FDwfDigitalIOOutputGet(handle, byref(current_output_mask)))
+
+            if preserve_existing:
+                output_enable_mask = current_enable_mask.value | selected_mask
+                output_mask = (current_output_mask.value & ~selected_mask) | values_mask
+            else:
+                output_enable_mask = selected_mask
+                output_mask = values_mask
+
+            self._require_ok(
+                self._dwf.FDwfDigitalIOOutputEnableSet(handle, c_uint(output_enable_mask))
+            )
+            self._require_ok(self._dwf.FDwfDigitalIOOutputSet(handle, c_uint(output_mask)))
+            self._require_ok(self._dwf.FDwfDigitalIOConfigure(handle))
+
+            return DigitalOutputStatus(
+                pins=pins,
+                values=_digital_values(output_mask, pins),
+                output_enable_mask=output_enable_mask,
+                output_mask=output_mask,
+            )
+        finally:
+            self._dwf.FDwfDeviceClose(handle)
+
     def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
         handle = self._open_device(device_index)
 
@@ -780,6 +864,12 @@ class CtypesDwfAdapter:
             ),
         }
 
+    def _read_digital_input_mask(self, handle: c_int) -> int:
+        input_mask = c_uint()
+        self._require_ok(self._dwf.FDwfDigitalIOStatus(handle))
+        self._require_ok(self._dwf.FDwfDigitalIOInputStatus(handle, byref(input_mask)))
+        return input_mask.value
+
     def _require_ok(self, result: int) -> None:
         if not result:
             raise DwfError(self._last_error_message("WaveForms SDK call failed"))
@@ -807,6 +897,29 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
 
 def _bit_is_set(value: int, bit_index: int) -> bool:
     return bool(value & (1 << bit_index))
+
+
+def _mask_to_pins(mask: int) -> list[int]:
+    return [pin for pin in range(32) if mask & (1 << pin)]
+
+
+def _pins_to_mask(pins: list[int]) -> int:
+    mask = 0
+    for pin in pins:
+        mask |= 1 << pin
+    return mask
+
+
+def _pin_values_to_mask(pins: list[int], values: list[bool]) -> int:
+    mask = 0
+    for pin, value in zip(pins, values, strict=True):
+        if value:
+            mask |= 1 << pin
+    return mask
+
+
+def _digital_values(mask: int, pins: list[int]) -> dict[str, bool]:
+    return {str(pin): bool(mask & (1 << pin)) for pin in pins}
 
 
 class LazyDwfAdapter:
@@ -846,6 +959,26 @@ class LazyDwfAdapter:
 
     def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
         return self._get_adapter().get_analog_input_status(device_index)
+
+    def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
+        return self._get_adapter().get_digital_io_limits(device_index)
+
+    def read_digital_inputs(self, device_index: int, pins: list[int]) -> DigitalInputRead:
+        return self._get_adapter().read_digital_inputs(device_index, pins)
+
+    def write_digital_outputs(
+        self,
+        device_index: int,
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+    ) -> DigitalOutputStatus:
+        return self._get_adapter().write_digital_outputs(
+            device_index,
+            pins,
+            values,
+            preserve_existing,
+        )
 
     def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
         return self._get_adapter().get_wavegen_limits(device_index)

@@ -140,6 +140,50 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
         ).model_dump(exclude_none=True)
 
     @mcp.tool()
+    def get_digital_io_limits(
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Return static digital I/O pin capabilities."""
+
+        return service.get_digital_io_limits(
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def read_digital_inputs(
+        pins: list[int] | None = None,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Read static digital input pin values."""
+
+        return service.read_digital_inputs(
+            pins=pins,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def write_digital_outputs(
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Write static digital output pin values."""
+
+        return service.write_digital_outputs(
+            pins=pins,
+            values=values,
+            preserve_existing=preserve_existing,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
     def get_wavegen_limits(
         device_index: int | None = None,
         serial_number: str | None = None,

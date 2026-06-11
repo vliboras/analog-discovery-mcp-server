@@ -22,12 +22,16 @@ Implemented MCP tools:
 - `start_wavegen`
 - `stop_wavegen`
 - `get_wavegen_status`
+- `get_digital_io_limits`
+- `read_digital_inputs`
+- `write_digital_outputs`
 
 All tools work against the fake backend. The real WaveForms backend supports
 version detection, device listing, analog voltage reads, analog capture limit
 reporting, small analog waveform captures with analog edge triggers, core
 waveform measurements, analog input status reporting, and basic Wavegen output
-control including bounded repeated custom samples.
+control including bounded repeated custom samples. Static digital I/O is
+implemented for 32-bit WaveForms DigitalIO masks targeting Analog Discovery 2/3.
 
 ## Development Stages
 
@@ -108,6 +112,22 @@ Ready state: the MCP server supports common mixed-signal workflows.
   status, and lost/corrupt sample indicators when available.
 - Keep pin/channel numbering consistent with WaveForms and document the
   user-facing numbering clearly.
+
+### Stage 4A: Digital Static I/O - Implemented
+
+Ready state: the MCP server can read and drive static DIO pins for simple
+mixed-signal checks.
+
+- Added digital static I/O tools:
+  - `get_digital_io_limits`
+  - `read_digital_inputs`
+  - `write_digital_outputs`
+- Public digital pins are zero-based and match WaveForms labels such as `DIO0`.
+- Fake backend exposes 16 deterministic DIO pins; written outputs read back as
+  digital inputs.
+- Real backend uses WaveForms `FDwfDigitalIO*` static I/O functions with 32-bit
+  masks for Analog Discovery 2/3.
+- Stage 4 logic analyzer and digital pattern output remain pending.
 
 ### Stage 5: Power, Protocols, And Release Polish
 

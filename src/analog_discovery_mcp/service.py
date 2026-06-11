@@ -12,6 +12,7 @@ from analog_discovery_mcp.models import (
     AnalogCaptureLimits,
     AnalogTriggerConfig,
     DeviceInfo,
+    DigitalIOLimits,
     ToolResult,
     WavegenChannelLimits,
     WavegenConfig,
@@ -213,6 +214,78 @@ class AnalogDiscoveryService:
         except (DwfError, ValueError) as exc:
             return ToolResult(ok=False, error=str(exc))
 
+    def get_digital_io_limits(
+        self,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_digital_io_limits(selected_device.index)
+            return ToolResult(
+                ok=True,
+                data={
+                    **asdict(limits),
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def read_digital_inputs(
+        self,
+        pins: list[int] | None = None,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_digital_io_limits(selected_device.index)
+            requested_pins = limits.supported_input_pins if pins is None else pins
+            _validate_digital_pins(
+                "pins",
+                requested_pins,
+                limits.supported_input_pins,
+            )
+            read = self._adapter.read_digital_inputs(selected_device.index, requested_pins)
+            return ToolResult(
+                ok=True,
+                data={
+                    **asdict(read),
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def write_digital_outputs(
+        self,
+        pins: list[int],
+        values: list[bool],
+        preserve_existing: bool = True,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_digital_io_limits(selected_device.index)
+            _validate_digital_write_request(pins, values, limits)
+            status = self._adapter.write_digital_outputs(
+                selected_device.index,
+                pins,
+                values,
+                preserve_existing,
+            )
+            return ToolResult(
+                ok=True,
+                data={
+                    **asdict(status),
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
     def get_wavegen_limits(
         self,
         device_index: int | None = None,
@@ -388,6 +461,32 @@ def _validate_capture_request(
     if total_samples > limits.max_total_returned_samples:
         raise ValueError(
             f"total returned samples must be at most {limits.max_total_returned_samples}"
+        )
+
+
+def _validate_digital_write_request(
+    pins: list[int],
+    values: list[bool],
+    limits: DigitalIOLimits,
+) -> None:
+    _validate_digital_pins("pins", pins, limits.supported_output_pins)
+    if len(values) != len(pins):
+        raise ValueError("values length must match pins length")
+    if not all(isinstance(value, bool) for value in values):
+        raise ValueError("values must contain booleans")
+
+
+def _validate_digital_pins(name: str, pins: list[int], supported_pins: list[int]) -> None:
+    if not pins:
+        raise ValueError(f"{name} must not be empty")
+
+    if len(set(pins)) != len(pins):
+        raise ValueError(f"{name} must not contain duplicates")
+
+    unsupported_pins = sorted(set(pins) - set(supported_pins))
+    if unsupported_pins:
+        raise ValueError(
+            f"{name} must only contain supported pins {supported_pins}; got {unsupported_pins}"
         )
 
 

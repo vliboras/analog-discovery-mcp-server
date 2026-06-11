@@ -54,14 +54,13 @@ Used for:
 Requirements:
 
 - Includes everything from `analog-loopback`.
-- Adds selected digital loopbacks, to be defined when digital I/O tools are
-  implemented.
+- DIO0 connected to DIO1 for static digital output-to-input loopback checks.
 
-Used for future:
+Used for:
 
 - digital input/output checks
-- logic analyzer checks
-- protocol-oriented smoke tests
+- future logic analyzer checks
+- future protocol-oriented smoke tests
 
 ## Stand Selection
 
