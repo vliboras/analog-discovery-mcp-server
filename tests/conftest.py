@@ -27,8 +27,7 @@ ENV_HARDWARE_STAND = "AD_MCP_HARDWARE_STAND"
 DEFAULT_HARDWARE_STAND = "basic"
 HARDWARE_STAND_ORDER = {
     "basic": 0,
-    "analog-loopback": 1,
-    "mixed-signal-loopback": 2,
+    "advanced": 1,
 }
 
 

@@ -102,7 +102,7 @@ def test_hardware_can_measure_analog_waveform() -> None:
     assert result.data["max_voltage"] >= result.data["min_voltage"]
 
 
-@pytest.mark.hardware_stand("analog-loopback")
+@pytest.mark.hardware_stand("advanced")
 def test_hardware_can_capture_with_analog_trigger() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
@@ -124,13 +124,14 @@ def test_hardware_can_capture_with_analog_trigger() -> None:
     assert result.data["auto_triggered"] is False
 
 
-@pytest.mark.hardware_stand("analog-loopback")
-def test_hardware_can_start_and_stop_wavegen() -> None:
+@pytest.mark.hardware_stand("advanced")
+@pytest.mark.parametrize("channel", [1, 2])
+def test_hardware_can_start_and_stop_wavegen(channel: int) -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
     try:
         start = service.start_wavegen(
-            channel=1,
+            channel=channel,
             waveform="sine",
             frequency_hz=1000.0,
             amplitude_v=0.5,
@@ -141,7 +142,7 @@ def test_hardware_can_start_and_stop_wavegen() -> None:
         assert start.data["running"] is True
 
         capture = service.measure_analog_waveform(
-            channel=1,
+            channel=channel,
             sample_rate_hz=10_000.0,
             sample_count=128,
         )
@@ -149,15 +150,20 @@ def test_hardware_can_start_and_stop_wavegen() -> None:
         assert capture.data is not None
         assert capture.data["peak_to_peak_voltage"] > 0.1
     finally:
-        stop = service.stop_wavegen(channel=1)
+        stop = service.stop_wavegen(channel=channel)
         assert stop.ok is True
 
 
-@pytest.mark.hardware_stand("mixed-signal-loopback")
-def test_hardware_can_write_and_read_digital_loopback() -> None:
+@pytest.mark.hardware_stand("advanced")
+@pytest.mark.parametrize(
+    ("output_pin", "input_pin"),
+    [(output_pin, output_pin + 8) for output_pin in range(8)],
+)
+def test_hardware_can_write_and_read_digital_loopback(
+    output_pin: int,
+    input_pin: int,
+) -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
-    output_pin = 0
-    input_pin = 1
 
     try:
         low = service.write_digital_outputs(pins=[output_pin], values=[False])

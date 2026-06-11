@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Simplify hardware test stands to `basic` and `advanced`, with advanced
+  covering analog and DIO0-DIO7 to DIO8-DIO15 loopback validation.
+- Add a hardware validation checkpoint to the roadmap before further Stage 4
+  feature work.
 - Implement Stage 3.1 custom Wavegen sample playback through `start_wavegen`.
 - Add bounded custom sample validation and fake/real backend support with
   WaveForms `funcCustom` uploads.

@@ -32,6 +32,8 @@ reporting, small analog waveform captures with analog edge triggers, core
 waveform measurements, analog input status reporting, and basic Wavegen output
 control including bounded repeated custom samples. Static digital I/O is
 implemented for 32-bit WaveForms DigitalIO masks targeting Analog Discovery 2/3.
+Feature development is paused at this Stage 4A surface while the project runs a
+real-hardware validation checkpoint with a real MCP client/agent.
 
 ## Development Stages
 
@@ -113,7 +115,7 @@ Ready state: the MCP server supports common mixed-signal workflows.
 - Keep pin/channel numbering consistent with WaveForms and document the
   user-facing numbering clearly.
 
-### Stage 4A: Digital Static I/O - Implemented
+### Stage 4A: Digital Static I/O - Implemented, Awaiting Hardware Validation
 
 Ready state: the MCP server can read and drive static DIO pins for simple
 mixed-signal checks.
@@ -128,6 +130,33 @@ mixed-signal checks.
 - Real backend uses WaveForms `FDwfDigitalIO*` static I/O functions with 32-bit
   masks for Analog Discovery 2/3.
 - Stage 4 logic analyzer and digital pattern output remain pending.
+
+### Hardware Validation Checkpoint - Active
+
+Ready state: the current Stage 4A tool surface has been exercised on real
+Analog Discovery hardware through both automated hardware tests and a real MCP
+client/agent session.
+
+- Pause new feature development until this checkpoint is complete.
+- Keep the public MCP tool/API surface unchanged during the checkpoint.
+- Use two hardware stands:
+  - `basic`: connected Analog Discovery device with WaveForms installed and no
+    required signal wiring.
+  - `advanced`: W1 to Scope `1+`, W2 to Scope `2+`, common GND references, and
+    DIO0-DIO7 looped to DIO8-DIO15 respectively.
+- Run full local checks:
+  - `rtk uv run ruff check`
+  - `rtk uv run mypy`
+  - `rtk uv run pytest`
+- Run hardware checks:
+  - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=basic rtk uv run pytest -m hardware -q`
+  - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced rtk uv run pytest -m hardware -q`
+- Run real MCP client/agent validation against hardware for version, device
+  listing, analog voltage/status, capture, measurement, Wavegen start/status/stop
+  on both channels, and digital loopback read/write checks.
+- Fix only bugs, reliability issues, docs gaps, and safety issues discovered
+  during validation before resuming Stage 4 logic analyzer or digital pattern
+  work.
 
 ### Stage 5: Power, Protocols, And Release Polish
 

@@ -283,7 +283,7 @@ AD_MCP_HARDWARE_TESTS=1 uv run pytest -m hardware
 Hardware tests can also select a documented physical stand:
 
 ```bash
-AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=analog-loopback uv run pytest -m hardware
+AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced uv run pytest -m hardware
 ```
 
 Available stands are documented in [docs/HARDWARE_TESTING.md](docs/HARDWARE_TESTING.md).
