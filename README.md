@@ -11,6 +11,7 @@ This project exposes a small local instrument-control tool surface for MCP clien
 - Measure core voltage statistics from one analog input channel.
 - Drive Wavegen outputs: sine, square, triangle, DC, and bounded custom samples.
 - Read and drive static digital I/O pins.
+- Safely release active outputs and the WaveForms device handle.
 
 Analog waveform capture is supported for small local captures.
 
@@ -215,6 +216,20 @@ Stops Wavegen output on one channel. The fake backend preserves the last config 
 ### `get_wavegen_status`
 
 Returns Wavegen state, running flag, and current config when available.
+
+### `release_device`
+
+Safely releases MCP ownership of the selected device. This stops active Wavegen
+channels tracked by the server, disables static DIO outputs, and closes the
+cached WaveForms device handle so other applications can open the hardware.
+
+Inputs:
+
+- `device_index`: optional zero-based device index
+- `serial_number`: optional device serial number
+
+Outputs include `released`, `wavegen_channels_stopped`,
+`digital_output_enable_mask`, and `device`.
 
 ### Digital I/O
 

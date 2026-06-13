@@ -754,8 +754,9 @@ def test_real_digital_output_write_preserves_existing_state() -> None:
         "FDwfDigitalIOOutputEnableSet",
         "FDwfDigitalIOOutputSet",
         "FDwfDigitalIOConfigure",
-        "FDwfDeviceClose",
     ]
+    adapter.close()
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 
 def test_real_digital_output_write_can_replace_existing_state() -> None:
@@ -775,6 +776,8 @@ def test_real_digital_output_write_can_replace_existing_state() -> None:
     assert status.output_mask == 0b0010
     assert sdk.digital_output_enable_mask == 0b0010
     assert sdk.digital_output_mask == 0b0010
+    assert _call_names(sdk)[-1] == "FDwfDigitalIOConfigure"
+    adapter.close()
     assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 
@@ -818,8 +821,9 @@ def test_real_wavegen_start_configures_output() -> None:
         "FDwfAnalogOutNodeOffsetSet",
         "FDwfAnalogOutNodeSymmetrySet",
         "FDwfAnalogOutConfigure",
-        "FDwfDeviceClose",
     ]
+    adapter.close()
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 
 def test_real_wavegen_start_configures_custom_output() -> None:
@@ -855,11 +859,12 @@ def test_real_wavegen_start_configures_custom_output() -> None:
         "FDwfAnalogOutNodeOffsetSet",
         "FDwfAnalogOutNodeSymmetrySet",
         "FDwfAnalogOutConfigure",
-        "FDwfDeviceClose",
     ]
+    adapter.close()
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 
-def test_real_wavegen_stop_reads_status_and_closes_device() -> None:
+def test_real_wavegen_stop_reads_status_and_closes_temporary_device() -> None:
     sdk = FakeWaveFormsSdk()
     adapter = _adapter_with_sdk(sdk)
 
@@ -871,6 +876,123 @@ def test_real_wavegen_stop_reads_status_and_closes_device() -> None:
     assert _call_names(sdk)[-1] == "FDwfDeviceClose"
     assert "FDwfAnalogOutConfigure" in _call_names(sdk)
     assert "FDwfAnalogOutStatus" in _call_names(sdk)
+
+
+def test_real_wavegen_stop_keeps_handle_open_for_other_active_channel() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    adapter.start_wavegen(
+        device_index=0,
+        config=WavegenConfig(
+            channel=1,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=1.0,
+            offset_v=0.0,
+            duty_cycle_percent=50.0,
+        ),
+    )
+    adapter.start_wavegen(
+        device_index=0,
+        config=WavegenConfig(
+            channel=2,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=1.0,
+            offset_v=0.0,
+            duty_cycle_percent=50.0,
+        ),
+    )
+
+    status = adapter.stop_wavegen(device_index=0, channel=1)
+    adapter.get_wavegen_status(device_index=0, channel=2)
+
+    assert status.running is False
+    assert _call_names(sdk).count("FDwfDeviceOpen") == 1
+    assert _call_names(sdk)[-1] != "FDwfDeviceClose"
+    released = adapter.release_device(device_index=0)
+    assert released.released is True
+    assert released.wavegen_channels_stopped == [2]
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_wavegen_stop_keeps_handle_open_for_active_digital_outputs() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    adapter.start_wavegen(
+        device_index=0,
+        config=WavegenConfig(
+            channel=1,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=1.0,
+            offset_v=0.0,
+            duty_cycle_percent=50.0,
+        ),
+    )
+    adapter.write_digital_outputs(device_index=0, pins=[0], values=[True])
+    status = adapter.stop_wavegen(device_index=0, channel=1)
+    adapter.read_digital_inputs(device_index=0, pins=[0])
+
+    assert status.running is False
+    assert sdk.digital_output_enable_mask == 0b1
+    assert _call_names(sdk).count("FDwfDeviceOpen") == 1
+    assert _call_names(sdk)[-1] != "FDwfDeviceClose"
+    released = adapter.release_device(device_index=0)
+    assert released.released is True
+    assert released.wavegen_channels_stopped == []
+    assert sdk.digital_output_enable_mask == 0
+    assert sdk.digital_output_mask == 0
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_release_device_is_idempotent() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    first = adapter.release_device(device_index=0)
+    second = adapter.release_device(device_index=0)
+
+    assert first.released is False
+    assert second.released is False
+    assert first.wavegen_channels_stopped == []
+    assert second.digital_output_enable_mask == 0
+    assert _call_names(sdk) == []
+
+
+def test_real_release_device_stops_outputs_and_closes_handle() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    adapter.start_wavegen(
+        device_index=0,
+        config=WavegenConfig(
+            channel=1,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=1.0,
+            offset_v=0.0,
+            duty_cycle_percent=50.0,
+        ),
+    )
+    adapter.write_digital_outputs(device_index=0, pins=[0, 1], values=[True, False])
+
+    released = adapter.release_device(device_index=0)
+
+    assert released.released is True
+    assert released.wavegen_channels_stopped == [1]
+    assert released.digital_output_enable_mask == 0
+    assert sdk.digital_output_enable_mask == 0
+    assert sdk.digital_output_mask == 0
+    assert _call_names(sdk)[-5:] == [
+        "FDwfAnalogOutConfigure",
+        "FDwfDigitalIOOutputEnableSet",
+        "FDwfDigitalIOOutputSet",
+        "FDwfDigitalIOConfigure",
+        "FDwfDeviceClose",
+    ]
 
 
 def test_real_wavegen_status_returns_running_config() -> None:

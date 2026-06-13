@@ -93,6 +93,13 @@ class DigitalOutputStatus:
 
 
 @dataclass(frozen=True)
+class ReleaseDeviceStatus:
+    released: bool
+    wavegen_channels_stopped: list[int]
+    digital_output_enable_mask: int
+
+
+@dataclass(frozen=True)
 class WavegenChannelLimits:
     frequency_min_hz: float
     frequency_max_hz: float

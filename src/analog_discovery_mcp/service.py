@@ -375,6 +375,24 @@ class AnalogDiscoveryService:
         except (DwfError, ValueError) as exc:
             return ToolResult(ok=False, error=str(exc))
 
+    def release_device(
+        self,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            status = self._adapter.release_device(selected_device.index)
+            return ToolResult(
+                ok=True,
+                data={
+                    **asdict(status),
+                    "device": asdict(selected_device),
+                },
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
     def _select_device(
         self,
         device_index: int | None,

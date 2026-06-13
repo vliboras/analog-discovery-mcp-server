@@ -106,15 +106,28 @@ def test_hardware_can_measure_analog_waveform() -> None:
 def test_hardware_can_capture_with_analog_trigger() -> None:
     service = AnalogDiscoveryService(CtypesDwfAdapter())
 
-    result = service.capture_analog_waveform(
-        channels=[1],
-        sample_rate_hz=1000.0,
-        sample_count=64,
-        trigger_enabled=True,
-        trigger_level_v=0.5,
-        trigger_edge="rising",
-        trigger_auto_timeout_seconds=2.0,
-    )
+    try:
+        start = service.start_wavegen(
+            channel=1,
+            waveform="sine",
+            frequency_hz=100.0,
+            amplitude_v=1.0,
+            offset_v=0.0,
+        )
+        assert start.ok is True
+
+        result = service.capture_analog_waveform(
+            channels=[1],
+            sample_rate_hz=1000.0,
+            sample_count=64,
+            trigger_enabled=True,
+            trigger_level_v=0.0,
+            trigger_edge="rising",
+            trigger_auto_timeout_seconds=2.0,
+        )
+    finally:
+        stop = service.stop_wavegen(channel=1)
+        assert stop.ok is True
 
     assert result.ok is True
     assert result.data is not None
@@ -183,3 +196,74 @@ def test_hardware_can_write_and_read_digital_loopback(
     finally:
         low = service.write_digital_outputs(pins=[output_pin], values=[False])
         assert low.ok is True
+
+
+@pytest.mark.hardware_stand("advanced")
+def test_hardware_release_preserves_digital_after_stopping_wavegen() -> None:
+    service = AnalogDiscoveryService(CtypesDwfAdapter())
+
+    try:
+        start = service.start_wavegen(
+            channel=1,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=0.5,
+            offset_v=0.0,
+        )
+        assert start.ok is True
+        high = service.write_digital_outputs(pins=[0], values=[True])
+        assert high.ok is True
+        stop = service.stop_wavegen(channel=1)
+        assert stop.ok is True
+
+        read = service.read_digital_inputs(pins=[8])
+
+        assert read.ok is True
+        assert read.data is not None
+        assert read.data["values"]["8"] is True
+    finally:
+        released = service.release_device()
+        assert released.ok is True
+        assert released.data is not None
+        assert released.data["digital_output_enable_mask"] == 0
+
+    limits = service.get_digital_io_limits()
+    assert limits.ok is True
+
+
+@pytest.mark.hardware_stand("advanced")
+def test_hardware_stopping_one_wavegen_channel_keeps_other_running() -> None:
+    service = AnalogDiscoveryService(CtypesDwfAdapter())
+
+    try:
+        start_1 = service.start_wavegen(
+            channel=1,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=0.5,
+            offset_v=0.0,
+        )
+        start_2 = service.start_wavegen(
+            channel=2,
+            waveform="sine",
+            frequency_hz=1000.0,
+            amplitude_v=0.5,
+            offset_v=0.0,
+        )
+        assert start_1.ok is True
+        assert start_2.ok is True
+
+        stop_1 = service.stop_wavegen(channel=1)
+        assert stop_1.ok is True
+        capture_2 = service.measure_analog_waveform(
+            channel=2,
+            sample_rate_hz=10_000.0,
+            sample_count=128,
+        )
+
+        assert capture_2.ok is True
+        assert capture_2.data is not None
+        assert capture_2.data["peak_to_peak_voltage"] > 0.1
+    finally:
+        released = service.release_device()
+        assert released.ok is True

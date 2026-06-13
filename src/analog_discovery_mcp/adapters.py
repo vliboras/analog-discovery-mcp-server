@@ -11,6 +11,7 @@ from analog_discovery_mcp.models import (
     DigitalInputRead,
     DigitalIOLimits,
     DigitalOutputStatus,
+    ReleaseDeviceStatus,
     WavegenConfig,
     WavegenLimits,
     WavegenStatus,
@@ -69,3 +70,6 @@ class DwfAdapter(Protocol):
 
     def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
         """Return analog output generation status."""
+
+    def release_device(self, device_index: int) -> ReleaseDeviceStatus:
+        """Safely stop active outputs and release the selected device."""

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import time
+from contextlib import suppress
 from ctypes import (
     CDLL,
     byref,
@@ -11,6 +12,7 @@ from ctypes import (
     c_uint,
     create_string_buffer,
 )
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from analog_discovery_mcp.models import (
@@ -23,6 +25,7 @@ from analog_discovery_mcp.models import (
     DigitalInputRead,
     DigitalIOLimits,
     DigitalOutputStatus,
+    ReleaseDeviceStatus,
     WavegenChannelLimits,
     WavegenConfig,
     WavegenLimits,
@@ -74,6 +77,13 @@ class DeviceOpenError(DwfError):
     """Raised when a selected WaveForms device cannot be opened."""
 
 
+@dataclass
+class _DeviceSession:
+    handle: c_int
+    wavegen_running_channels: set[int] = field(default_factory=set)
+    digital_output_enable_mask: int = 0
+
+
 def default_library_path() -> str:
     if sys.platform.startswith("win"):
         return "dwf"
@@ -91,6 +101,23 @@ class CtypesDwfAdapter:
             self._dwf = cast(Any, CDLL(path))
         except OSError as exc:
             raise DwfUnavailableError(f"Unable to load WaveForms SDK library: {path}") from exc
+        self._device_sessions: dict[int, _DeviceSession] = {}
+
+    def close(self) -> None:
+        if not hasattr(self, "_device_sessions"):
+            return
+        for device_index in list(self._device_sessions):
+            self._close_device(device_index)
+
+    def __enter__(self) -> CtypesDwfAdapter:
+        return self
+
+    def __exit__(self, *_exc_info: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        with suppress(Exception):
+            self.close()
 
     def get_version(self) -> str:
         version = create_string_buffer(32)
@@ -125,10 +152,9 @@ class CtypesDwfAdapter:
         return devices
 
     def read_analog_voltage(self, device_index: int, channel_index: int) -> float:
-        handle = c_int()
-        self._require_ok(self._dwf.FDwfDeviceOpen(c_int(device_index), byref(handle)))
-        if handle.value == 0:
-            raise DeviceOpenError(self._last_error_message("Unable to open WaveForms device"))
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             self._require_ok(self._dwf.FDwfDeviceAutoConfigureSet(handle, c_int(0)))
@@ -143,11 +169,18 @@ class CtypesDwfAdapter:
                 self._dwf.FDwfAnalogInStatusSample(handle, c_int(channel_index), byref(voltage))
             )
             return float(voltage.value)
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def get_analog_capture_limits(self, device_index: int) -> AnalogCaptureLimits:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             channel_count = c_int()
@@ -191,8 +224,13 @@ class CtypesDwfAdapter:
                 max_sample_count_per_channel=max_sample_count,
                 max_total_returned_samples=max_total_samples,
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def capture_analog_waveform(
         self,
@@ -202,7 +240,9 @@ class CtypesDwfAdapter:
         sample_count: int,
         trigger_config: AnalogTriggerConfig | None = None,
     ) -> AnalogCapture:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             self._require_ok(self._dwf.FDwfDeviceAutoConfigureSet(handle, c_int(0)))
@@ -256,11 +296,18 @@ class CtypesDwfAdapter:
                 status_time=metadata["status_time"],
                 trigger=trigger_config,
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def get_analog_input_status(self, device_index: int) -> AnalogInputStatus:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             channel_count = c_int()
@@ -326,11 +373,18 @@ class CtypesDwfAdapter:
                 channel_offsets=channel_offsets,
                 state=int(state.value),
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def get_wavegen_limits(self, device_index: int) -> WavegenLimits:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             channel_count = c_int()
@@ -465,11 +519,18 @@ class CtypesDwfAdapter:
                 default_duty_cycle_percent=DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT,
                 channel_limits=channel_limits,
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def get_digital_io_limits(self, device_index: int) -> DigitalIOLimits:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             input_mask = c_uint()
@@ -492,11 +553,18 @@ class CtypesDwfAdapter:
                 input_mask=input_mask.value,
                 output_enable_mask=supported_output_mask,
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def read_digital_inputs(self, device_index: int, pins: list[int]) -> DigitalInputRead:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             input_mask = self._read_digital_input_mask(handle)
@@ -505,8 +573,13 @@ class CtypesDwfAdapter:
                 values=_digital_values(input_mask, pins),
                 input_mask=input_mask,
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def write_digital_outputs(
         self,
@@ -515,7 +588,8 @@ class CtypesDwfAdapter:
         values: list[bool],
         preserve_existing: bool = True,
     ) -> DigitalOutputStatus:
-        handle = self._open_device(device_index)
+        session = self._device_session(device_index)
+        handle = session.handle
 
         try:
             selected_mask = _pins_to_mask(pins)
@@ -539,6 +613,7 @@ class CtypesDwfAdapter:
             )
             self._require_ok(self._dwf.FDwfDigitalIOOutputSet(handle, c_uint(output_mask)))
             self._require_ok(self._dwf.FDwfDigitalIOConfigure(handle))
+            session.digital_output_enable_mask = output_enable_mask
 
             return DigitalOutputStatus(
                 pins=pins,
@@ -546,11 +621,13 @@ class CtypesDwfAdapter:
                 output_enable_mask=output_enable_mask,
                 output_mask=output_mask,
             )
-        finally:
-            self._dwf.FDwfDeviceClose(handle)
+        except Exception:
+            self._close_device(device_index)
+            raise
 
     def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
-        handle = self._open_device(device_index)
+        session = self._device_session(device_index)
+        handle = session.handle
 
         try:
             channel_index = config.channel - 1
@@ -568,17 +645,26 @@ class CtypesDwfAdapter:
             self._require_ok(
                 self._dwf.FDwfAnalogOutConfigure(handle, c_int(channel_index), c_int(1))
             )
+            session.wavegen_running_channels.add(config.channel)
             return WavegenStatus(
                 channel=config.channel,
                 state=DWF_STATE_RUNNING,
                 running=True,
                 config=config,
             )
-        finally:
-            self._dwf.FDwfDeviceClose(handle)
+        except Exception:
+            self._close_device(device_index)
+            raise
 
     def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        active_session = (
+            self._device_sessions.get(device_index)
+            if self._has_device_handle(device_index)
+            else None
+        )
+        close_on_success = active_session is None
+        handle_closed = False
 
         try:
             channel_index = channel - 1
@@ -590,17 +676,30 @@ class CtypesDwfAdapter:
             self._require_ok(
                 self._dwf.FDwfAnalogOutStatus(handle, c_int(channel_index), byref(status))
             )
-            return WavegenStatus(
+            wavegen_status = WavegenStatus(
                 channel=channel,
                 state=int(status.value),
                 running=False,
                 config=config,
             )
+            if active_session is not None:
+                active_session.wavegen_running_channels.discard(channel)
+                if not self._session_has_active_outputs(active_session):
+                    self._close_device(device_index)
+                    handle_closed = True
+            return wavegen_status
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
 
     def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
-        handle = self._open_device(device_index)
+        handle = self._active_or_temporary_device_handle(device_index)
+        close_on_success = not self._has_device_handle(device_index)
+        handle_closed = False
 
         try:
             channel_index = channel - 1
@@ -614,8 +713,47 @@ class CtypesDwfAdapter:
                 running=status.value == DWF_STATE_RUNNING,
                 config=self._read_wavegen_config(handle, channel_index, channel),
             )
+        except Exception:
+            self._close_operation_handle(device_index, handle)
+            handle_closed = True
+            raise
         finally:
-            self._dwf.FDwfDeviceClose(handle)
+            if close_on_success and not handle_closed:
+                self._dwf.FDwfDeviceClose(handle)
+
+    def release_device(self, device_index: int) -> ReleaseDeviceStatus:
+        session = (
+            self._device_sessions.get(device_index)
+            if self._has_device_handle(device_index)
+            else None
+        )
+        if session is None:
+            return ReleaseDeviceStatus(
+                released=False,
+                wavegen_channels_stopped=[],
+                digital_output_enable_mask=0,
+            )
+
+        stopped_channels = sorted(session.wavegen_running_channels)
+        try:
+            for channel in stopped_channels:
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutConfigure(
+                        session.handle,
+                        c_int(channel - 1),
+                        c_int(0),
+                    )
+                )
+            self._require_ok(self._dwf.FDwfDigitalIOOutputEnableSet(session.handle, c_uint(0)))
+            self._require_ok(self._dwf.FDwfDigitalIOOutputSet(session.handle, c_uint(0)))
+            self._require_ok(self._dwf.FDwfDigitalIOConfigure(session.handle))
+            return ReleaseDeviceStatus(
+                released=True,
+                wavegen_channels_stopped=stopped_channels,
+                digital_output_enable_mask=0,
+            )
+        finally:
+            self._close_device(device_index)
 
     def _open_device(self, device_index: int) -> c_int:
         handle = c_int()
@@ -623,6 +761,39 @@ class CtypesDwfAdapter:
         if handle.value == 0:
             raise DeviceOpenError(self._last_error_message("Unable to open WaveForms device"))
         return handle
+
+    def _device_session(self, device_index: int) -> _DeviceSession:
+        if not hasattr(self, "_device_sessions"):
+            self._device_sessions = {}
+        session = self._device_sessions.get(device_index)
+        if session is None:
+            session = _DeviceSession(handle=self._open_device(device_index))
+            self._device_sessions[device_index] = session
+        return session
+
+    def _has_device_handle(self, device_index: int) -> bool:
+        return hasattr(self, "_device_sessions") and device_index in self._device_sessions
+
+    def _active_or_temporary_device_handle(self, device_index: int) -> c_int:
+        if self._has_device_handle(device_index):
+            return self._device_sessions[device_index].handle
+        return self._open_device(device_index)
+
+    def _close_device(self, device_index: int) -> None:
+        if not hasattr(self, "_device_sessions"):
+            return
+        session = self._device_sessions.pop(device_index, None)
+        if session is not None:
+            self._dwf.FDwfDeviceClose(session.handle)
+
+    def _close_operation_handle(self, device_index: int, handle: c_int) -> None:
+        if self._has_device_handle(device_index):
+            self._close_device(device_index)
+        else:
+            self._dwf.FDwfDeviceClose(handle)
+
+    def _session_has_active_outputs(self, session: _DeviceSession) -> bool:
+        return bool(session.wavegen_running_channels) or session.digital_output_enable_mask != 0
 
     def _write_wavegen_config(
         self,
@@ -991,6 +1162,9 @@ class LazyDwfAdapter:
 
     def get_wavegen_status(self, device_index: int, channel: int) -> WavegenStatus:
         return self._get_adapter().get_wavegen_status(device_index, channel)
+
+    def release_device(self, device_index: int) -> ReleaseDeviceStatus:
+        return self._get_adapter().release_device(device_index)
 
     def _get_adapter(self) -> CtypesDwfAdapter:
         if self._adapter is None:

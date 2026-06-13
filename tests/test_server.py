@@ -47,6 +47,7 @@ def test_registers_expected_tools() -> None:
         "get_waveforms_version",
         "list_devices",
         "measure_analog_waveform",
+        "release_device",
         "read_digital_inputs",
         "read_analog_voltage",
         "start_wavegen",
@@ -90,6 +91,7 @@ def test_registered_tools_call_service() -> None:
     digital_write = mcp.tools["write_digital_outputs"](pins=[0, 1], values=[True, False])
     wavegen_limits = mcp.tools["get_wavegen_limits"]()
     wavegen_status = mcp.tools["start_wavegen"](channel=1, waveform="square")
+    release = mcp.tools["release_device"]()
 
     assert version == {"ok": True, "data": {"version": "3.24.3"}}
     assert devices == {
@@ -129,6 +131,10 @@ def test_registered_tools_call_service() -> None:
     assert isinstance(wavegen_status, dict)
     assert wavegen_status["ok"] is True
     assert wavegen_status["data"]["running"] is True
+    assert isinstance(release, dict)
+    assert release["ok"] is True
+    assert release["data"]["released"] is True
+    assert release["data"]["wavegen_channels_stopped"] == [1]
 
 
 def test_tool_signatures_are_simple_for_mcp_schema() -> None:
@@ -161,3 +167,7 @@ def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     assert digital_write_annotations["pins"] == list[int]
     assert digital_write_annotations["values"] == list[bool]
     assert digital_write_annotations["preserve_existing"] is bool
+
+    release_annotations = get_type_hints(mcp.tools["release_device"])
+    assert release_annotations["device_index"] == int | None
+    assert release_annotations["serial_number"] == str | None

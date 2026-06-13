@@ -12,6 +12,7 @@ from analog_discovery_mcp.models import (
     DigitalInputRead,
     DigitalIOLimits,
     DigitalOutputStatus,
+    ReleaseDeviceStatus,
     WavegenChannelLimits,
     WavegenConfig,
     WavegenLimits,
@@ -214,6 +215,28 @@ class FakeDwfAdapter:
         self._validate_device_index(device_index)
         self._validate_wavegen_channel(channel)
         return self._wavegen_state[channel]
+
+    def release_device(self, device_index: int) -> ReleaseDeviceStatus:
+        self._validate_device_index(device_index)
+        stopped_channels = [
+            channel for channel, status in self._wavegen_state.items() if status.running
+        ]
+        for channel in stopped_channels:
+            previous = self._wavegen_state[channel]
+            self._wavegen_state[channel] = WavegenStatus(
+                channel=channel,
+                state=2,
+                running=False,
+                config=previous.config,
+            )
+        released = bool(stopped_channels) or self._digital_output_enable_mask != 0
+        self._digital_output_enable_mask = 0
+        self._digital_output_mask = 0
+        return ReleaseDeviceStatus(
+            released=released,
+            wavegen_channels_stopped=sorted(stopped_channels),
+            digital_output_enable_mask=0,
+        )
 
     def _validate_device_index(self, device_index: int) -> None:
         if device_index != self._device.index:

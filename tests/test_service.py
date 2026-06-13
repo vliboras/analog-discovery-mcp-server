@@ -820,3 +820,20 @@ def test_stop_wavegen_returns_last_config(sample_devices: list[DeviceInfo]) -> N
     assert result.data is not None
     assert result.data["running"] is False
     assert result.data["config"]["waveform"] == "triangle"
+
+
+def test_release_device_returns_release_status(sample_devices: list[DeviceInfo]) -> None:
+    adapter = RecordingDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    service.start_wavegen(channel=1, waveform="triangle")
+    service.write_digital_outputs(pins=[0], values=[True])
+    result = service.release_device()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["released"] is True
+    assert result.data["wavegen_channels_stopped"] == [1]
+    assert result.data["digital_output_enable_mask"] == 0
+    assert result.data["device"]["serial_number"] == "SN:AD2"
+    assert adapter.digital_output_enable_mask == 0

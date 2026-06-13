@@ -38,6 +38,7 @@ async def _call_fake_backend_tools() -> None:
             "get_waveforms_version",
             "list_devices",
             "measure_analog_waveform",
+            "release_device",
             "read_analog_voltage",
             "start_wavegen",
             "stop_wavegen",
@@ -135,6 +136,11 @@ async def _call_fake_backend_tools() -> None:
         wavegen_stop_payload = _structured_content(wavegen_stop)
         assert wavegen_stop_payload["ok"] is True
         assert wavegen_stop_payload["data"]["running"] is False
+
+        release = await session.call_tool("release_device", {})
+        release_payload = _structured_content(release)
+        assert release_payload["ok"] is True
+        assert release_payload["data"]["released"] is False
 
 
 def _structured_content(result: Any) -> dict[str, Any]:

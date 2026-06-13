@@ -22,6 +22,7 @@ Implemented MCP tools:
 - `start_wavegen`
 - `stop_wavegen`
 - `get_wavegen_status`
+- `release_device`
 - `get_digital_io_limits`
 - `read_digital_inputs`
 - `write_digital_outputs`
@@ -29,11 +30,12 @@ Implemented MCP tools:
 All tools work against the fake backend. The real WaveForms backend supports
 version detection, device listing, analog voltage reads, analog capture limit
 reporting, small analog waveform captures with analog edge triggers, core
-waveform measurements, analog input status reporting, and basic Wavegen output
-control including bounded repeated custom samples. Static digital I/O is
-implemented for 32-bit WaveForms DigitalIO masks targeting Analog Discovery 2/3.
-Feature development is paused at this Stage 4A surface while the project runs a
-real-hardware validation checkpoint with a real MCP client/agent.
+waveform measurements, analog input status reporting, basic Wavegen output
+control including bounded repeated custom samples, and explicit safe release of
+active outputs/device ownership. Static digital I/O is implemented for 32-bit
+WaveForms DigitalIO masks targeting Analog Discovery 2/3. Feature development
+is paused at this Stage 4A surface while the project runs a real-hardware
+validation checkpoint with a real MCP client/agent.
 
 ## Development Stages
 
@@ -124,6 +126,8 @@ mixed-signal checks.
   - `get_digital_io_limits`
   - `read_digital_inputs`
   - `write_digital_outputs`
+- Added `release_device` so users can safely stop active outputs and free the
+  WaveForms device handle for other applications.
 - Public digital pins are zero-based and match WaveForms labels such as `DIO0`.
 - Fake backend exposes 16 deterministic DIO pins; written outputs read back as
   digital inputs.
@@ -138,7 +142,8 @@ Analog Discovery hardware through both automated hardware tests and a real MCP
 client/agent session.
 
 - Pause new feature development until this checkpoint is complete.
-- Keep the public MCP tool/API surface unchanged during the checkpoint.
+- Keep the public MCP tool/API surface stable except for validation-driven bug
+  fixes and safety/reliability additions such as `release_device`.
 - Use two hardware stands:
   - `basic`: connected Analog Discovery device with WaveForms installed and no
     required signal wiring.
@@ -153,10 +158,23 @@ client/agent session.
   - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced rtk uv run pytest -m hardware -q`
 - Run real MCP client/agent validation against hardware for version, device
   listing, analog voltage/status, capture, measurement, Wavegen start/status/stop
-  on both channels, and digital loopback read/write checks.
+  on both channels, digital loopback read/write checks, and `release_device`.
 - Fix only bugs, reliability issues, docs gaps, and safety issues discovered
   during validation before resuming Stage 4 logic analyzer or digital pattern
   work.
+
+Non-blocking test cleanup notes before a broader public release:
+
+- Current non-hardware coverage is healthy for Stage 4A, with the dense
+  WaveForms wrapper as the main remaining lower-coverage area.
+- Add small tests for SDK loading/listing/version paths with a mocked `CDLL`
+  instead of real hardware.
+- Add `LazyDwfAdapter` forwarding tests so public adapter behavior is covered
+  without relying on incidental service tests.
+- Add one or two extra real-adapter fake-SDK failure-path tests for status/read
+  methods such as `get_wavegen_status` or `read_digital_inputs`.
+- Keep hardware coverage focused on high-risk workflows: output lifecycle,
+  release/reopen behavior, two-channel Wavegen independence, and DIO loopback.
 
 ### Stage 5: Power, Protocols, And Release Polish
 
@@ -291,6 +309,9 @@ the acceptance contract for future Stage 1 maintenance.
 - Every new tool must have service tests, server registration/schema tests, and
   fake backend tests.
 - Add MCP client integration coverage for new public tools when practical.
+- For stateful hardware behavior, add adapter-level fake-SDK lifecycle tests
+  plus at least one opt-in hardware smoke test when the behavior cannot be
+  trusted from mocks alone.
 - Keep hardware tests opt-in with `AD_MCP_HARDWARE_TESTS=1`.
 - Continue returning public tool results as `{ "ok": bool, "data": ..., "error": ... }`.
 

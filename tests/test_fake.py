@@ -158,6 +158,26 @@ def test_fake_adapter_replaces_digital_io_state() -> None:
     assert read.data["values"] == {"0": False, "1": True}
 
 
+def test_fake_adapter_releases_outputs() -> None:
+    service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
+
+    service.start_wavegen(channel=1, waveform="square")
+    service.write_digital_outputs(pins=[0], values=[True])
+    released = service.release_device()
+    status = service.get_wavegen_status(channel=1)
+    read = service.read_digital_inputs(pins=[0])
+
+    assert released.ok is True
+    assert released.data is not None
+    assert released.data["released"] is True
+    assert released.data["wavegen_channels_stopped"] == [1]
+    assert released.data["digital_output_enable_mask"] == 0
+    assert status.data is not None
+    assert status.data["running"] is False
+    assert read.data is not None
+    assert read.data["values"] == {"0": False}
+
+
 def test_fake_adapter_reports_wavegen_limits() -> None:
     service = AnalogDiscoveryService(FakeDwfAdapter(), environ={})
 

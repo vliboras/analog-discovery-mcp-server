@@ -251,6 +251,18 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
             serial_number=serial_number,
         ).model_dump(exclude_none=True)
 
+    @mcp.tool()
+    def release_device(
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Safely stop active outputs and release the selected device."""
+
+        return service.release_device(
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
 
 def main() -> None:
     create_mcp_server().run()
