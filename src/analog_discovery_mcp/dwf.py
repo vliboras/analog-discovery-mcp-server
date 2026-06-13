@@ -415,6 +415,8 @@ class CtypesDwfAdapter:
                 offset_max = c_double()
                 duty_min = c_double()
                 duty_max = c_double()
+                phase_min = c_double()
+                phase_max = c_double()
                 custom_sample_count_min: int | None = None
                 custom_sample_count_max: int | None = None
 
@@ -462,6 +464,15 @@ class CtypesDwfAdapter:
                         byref(duty_max),
                     )
                 )
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodePhaseInfo(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        byref(phase_min),
+                        byref(phase_max),
+                    )
+                )
 
                 supported_channels.append(channel_index + 1)
                 function_values = {
@@ -497,6 +508,8 @@ class CtypesDwfAdapter:
                     offset_max_v=float(offset_max.value),
                     duty_cycle_min_percent=float(duty_min.value),
                     duty_cycle_max_percent=float(duty_max.value),
+                    phase_min_degrees=float(phase_min.value),
+                    phase_max_degrees=float(phase_max.value),
                     custom_sample_count_min=custom_sample_count_min,
                     custom_sample_count_max=custom_sample_count_max,
                 )
@@ -652,6 +665,69 @@ class CtypesDwfAdapter:
                 running=True,
                 config=config,
             )
+        except Exception:
+            self._close_device(device_index)
+            raise
+
+    def start_synchronized_wavegen(
+        self,
+        device_index: int,
+        configs: list[WavegenConfig],
+        master_channel: int,
+    ) -> list[WavegenStatus]:
+        session = self._device_session(device_index)
+        handle = session.handle
+
+        try:
+            self._require_ok(self._dwf.FDwfDeviceAutoConfigureSet(handle, c_int(0)))
+            master_index = master_channel - 1
+            for config in configs:
+                self._require_ok(self._dwf.FDwfAnalogOutReset(handle, c_int(config.channel - 1)))
+            for config in configs:
+                channel_index = config.channel - 1
+                if config.channel != master_channel:
+                    self._require_ok(
+                        self._dwf.FDwfAnalogOutMasterSet(
+                            handle,
+                            c_int(channel_index),
+                            c_int(master_index),
+                        )
+                    )
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutNodeEnableSet(
+                        handle,
+                        c_int(channel_index),
+                        c_int(ANALOG_OUT_NODE_CARRIER),
+                        c_int(1),
+                    )
+                )
+                self._write_wavegen_config(handle, channel_index, config)
+
+            statuses: list[WavegenStatus] = []
+            for config in configs:
+                if config.channel == master_channel:
+                    continue
+                self._require_ok(
+                    self._dwf.FDwfAnalogOutConfigure(
+                        handle,
+                        c_int(config.channel - 1),
+                        c_int(0),
+                    )
+                )
+            self._require_ok(
+                self._dwf.FDwfAnalogOutConfigure(handle, c_int(master_index), c_int(1))
+            )
+            for config in configs:
+                session.wavegen_running_channels.add(config.channel)
+                statuses.append(
+                    WavegenStatus(
+                        channel=config.channel,
+                        state=DWF_STATE_RUNNING,
+                        running=True,
+                        config=config,
+                    )
+                )
+            return statuses
         except Exception:
             self._close_device(device_index)
             raise
@@ -854,6 +930,15 @@ class CtypesDwfAdapter:
                 c_double(config.duty_cycle_percent),
             )
         )
+        if config.phase_degrees is not None:
+            self._require_ok(
+                self._dwf.FDwfAnalogOutNodePhaseSet(
+                    handle,
+                    c_int(channel_index),
+                    c_int(ANALOG_OUT_NODE_CARRIER),
+                    c_double(config.phase_degrees),
+                )
+            )
 
     def _read_wavegen_config(
         self,
@@ -866,6 +951,7 @@ class CtypesDwfAdapter:
         amplitude = c_double()
         offset = c_double()
         duty_cycle = c_double()
+        phase = c_double()
 
         self._require_ok(
             self._dwf.FDwfAnalogOutNodeFunctionGet(
@@ -911,6 +997,14 @@ class CtypesDwfAdapter:
                 byref(duty_cycle),
             )
         )
+        self._require_ok(
+            self._dwf.FDwfAnalogOutNodePhaseGet(
+                handle,
+                c_int(channel_index),
+                c_int(ANALOG_OUT_NODE_CARRIER),
+                byref(phase),
+            )
+        )
 
         return WavegenConfig(
             channel=channel,
@@ -919,6 +1013,7 @@ class CtypesDwfAdapter:
             amplitude_v=float(amplitude.value),
             offset_v=float(offset.value),
             duty_cycle_percent=float(duty_cycle.value),
+            phase_degrees=float(phase.value),
         )
 
     def _configure_analog_trigger(
@@ -1156,6 +1251,18 @@ class LazyDwfAdapter:
 
     def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
         return self._get_adapter().start_wavegen(device_index, config)
+
+    def start_synchronized_wavegen(
+        self,
+        device_index: int,
+        configs: list[WavegenConfig],
+        master_channel: int,
+    ) -> list[WavegenStatus]:
+        return self._get_adapter().start_synchronized_wavegen(
+            device_index,
+            configs,
+            master_channel,
+        )
 
     def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
         return self._get_adapter().stop_wavegen(device_index, channel)

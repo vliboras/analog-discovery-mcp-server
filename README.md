@@ -149,7 +149,10 @@ valid sample count, lost/corrupt sample counts, and WaveForms status time when a
 
 Captures one analog input channel and returns core voltage statistics without raw sample arrays.
 
-Inputs match `capture_analog_waveform` for one channel.
+Inputs match `capture_analog_waveform` for one channel. If a trigger is enabled,
+`trigger_channel` must be the measured `channel` or omitted. To measure channel
+2 while triggering from channel 1, use `capture_analog_waveform` with
+`channels: [1, 2]` and compute statistics from the returned samples.
 
 Outputs include:
 
@@ -206,6 +209,41 @@ Example custom waveform:
   "sample_rate_hz": 4000.0,
   "amplitude_v": 1.0,
   "offset_v": 0.0
+}
+```
+
+### `start_synchronized_wavegen`
+
+Starts multiple Wavegen output channels with hardware synchronization.
+
+Inputs:
+
+- `channels`: output channels; default `[1, 2]`
+- `waveforms`: one waveform per channel; supports `sine`, `square`, `triangle`, and `dc`
+- `frequencies_hz`: one frequency per channel; default `1000.0`
+- `amplitudes_v`: one peak amplitude per channel; default `1.0`
+- `offsets_v`: one voltage offset per channel; default `0.0`
+- `duty_cycles_percent`: one symmetry/duty cycle per channel; default `50.0`
+- `phase_degrees`: one phase per channel; default `[0.0, 180.0]` for two channels
+- `master_channel`: channel that starts the synchronized group; default `1`
+- `device_index`: optional zero-based device index
+- `serial_number`: optional device serial number
+
+All provided per-channel lists must have the same length as `channels`. The synchronized
+tool uses WaveForms master/slave hardware control and phase settings; `custom` waveforms
+are not supported by this tool.
+
+Example synchronized opposite-phase sine:
+
+```json
+{
+  "channels": [1, 2],
+  "waveforms": ["sine", "sine"],
+  "frequencies_hz": [1000.0, 1000.0],
+  "amplitudes_v": [2.0, 2.0],
+  "offsets_v": [0.0, 0.0],
+  "phase_degrees": [0.0, 180.0],
+  "master_channel": 1
 }
 ```
 
@@ -302,6 +340,8 @@ AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced uv run pytest -m hardware
 ```
 
 Available stands are documented in [docs/HARDWARE_TESTING.md](docs/HARDWARE_TESTING.md).
+External real MCP client/agent validation scenarios are documented in
+[docs/REAL_AGENT_VALIDATION.md](docs/REAL_AGENT_VALIDATION.md).
 
 The staged development plan lives in [docs/ROADMAP.md](docs/ROADMAP.md).
 

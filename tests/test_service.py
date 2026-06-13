@@ -641,6 +641,111 @@ def test_start_wavegen_accepts_custom_samples(sample_devices: list[DeviceInfo]) 
     assert result.data["config"]["offset_v"] == 0.25
 
 
+def test_start_synchronized_wavegen_uses_defaults(sample_devices: list[DeviceInfo]) -> None:
+    adapter = RecordingDwfAdapter(devices=sample_devices)
+    service = AnalogDiscoveryService(adapter, environ={})
+
+    result = service.start_synchronized_wavegen()
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["synchronized"] is True
+    assert result.data["master_channel"] == 1
+    assert result.data["slave_channels"] == [2]
+    assert result.data["statuses"][0]["config"]["phase_degrees"] == 0.0
+    assert result.data["statuses"][1]["config"]["phase_degrees"] == 180.0
+    assert adapter.wavegen_calls[0][0] == "sync_start"
+
+
+def test_start_synchronized_wavegen_accepts_explicit_values(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(
+        channels=[1, 2],
+        waveforms=["sine", "triangle"],
+        frequencies_hz=[1000.0, 1000.0],
+        amplitudes_v=[2.0, 2.0],
+        offsets_v=[0.0, 0.0],
+        duty_cycles_percent=[50.0, 50.0],
+        phase_degrees=[0.0, 180.0],
+    )
+
+    assert result.ok is True
+    assert result.data is not None
+    statuses = result.data["statuses"]
+    assert statuses[0]["config"]["waveform"] == "sine"
+    assert statuses[1]["config"]["waveform"] == "triangle"
+    assert statuses[1]["config"]["phase_degrees"] == 180.0
+
+
+def test_start_synchronized_wavegen_rejects_mismatched_lengths(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(channels=[1, 2], phase_degrees=[0.0])
+
+    assert result.ok is False
+    assert result.error == "phase_degrees length must match channels length"
+
+
+def test_start_synchronized_wavegen_rejects_duplicate_channels(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(channels=[1, 1])
+
+    assert result.ok is False
+    assert result.error == "channels must not contain duplicates"
+
+
+def test_start_synchronized_wavegen_rejects_missing_master(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(channels=[2], master_channel=1)
+
+    assert result.ok is False
+    assert result.error == "master_channel must be included in channels"
+
+
+def test_start_synchronized_wavegen_rejects_custom_waveform(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(waveforms=["sine", "custom"])
+
+    assert result.ok is False
+    assert result.error == "custom waveform is not supported by start_synchronized_wavegen"
+
+
+def test_start_synchronized_wavegen_rejects_non_finite_phase(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(phase_degrees=[0.0, float("nan")])
+
+    assert result.ok is False
+    assert result.error == "phase_degrees must be finite"
+
+
+def test_start_synchronized_wavegen_rejects_out_of_range_phase(
+    sample_devices: list[DeviceInfo],
+) -> None:
+    service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
+
+    result = service.start_synchronized_wavegen(phase_degrees=[0.0, 361.0])
+
+    assert result.ok is False
+    assert result.error == "phase_degrees must be between -360.0 and 360.0"
+
+
 def test_start_wavegen_rejects_invalid_channel(sample_devices: list[DeviceInfo]) -> None:
     service = AnalogDiscoveryService(RecordingDwfAdapter(devices=sample_devices), environ={})
 

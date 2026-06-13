@@ -40,6 +40,7 @@ async def _call_fake_backend_tools() -> None:
             "measure_analog_waveform",
             "release_device",
             "read_analog_voltage",
+            "start_synchronized_wavegen",
             "start_wavegen",
             "stop_wavegen",
             "get_wavegen_status",
@@ -132,10 +133,33 @@ async def _call_fake_backend_tools() -> None:
         assert wavegen_custom_payload["data"]["config"]["samples"] == [-1.0, 0.0, 1.0, 0.0]
         assert wavegen_custom_payload["data"]["config"]["frequency_hz"] == 1000.0
 
+        synchronized_wavegen = await session.call_tool(
+            "start_synchronized_wavegen",
+            {
+                "channels": [1, 2],
+                "waveforms": ["sine", "sine"],
+                "frequencies_hz": [1000.0, 1000.0],
+                "amplitudes_v": [1.0, 1.0],
+                "offsets_v": [0.0, 0.0],
+                "phase_degrees": [0.0, 180.0],
+            },
+        )
+        synchronized_wavegen_payload = _structured_content(synchronized_wavegen)
+        assert synchronized_wavegen_payload["ok"] is True
+        assert synchronized_wavegen_payload["data"]["synchronized"] is True
+        assert synchronized_wavegen_payload["data"]["slave_channels"] == [2]
+        second_sync_config = synchronized_wavegen_payload["data"]["statuses"][1]["config"]
+        assert second_sync_config["phase_degrees"] == 180.0
+
         wavegen_stop = await session.call_tool("stop_wavegen", {"channel": 1})
         wavegen_stop_payload = _structured_content(wavegen_stop)
         assert wavegen_stop_payload["ok"] is True
         assert wavegen_stop_payload["data"]["running"] is False
+
+        wavegen_stop_2 = await session.call_tool("stop_wavegen", {"channel": 2})
+        wavegen_stop_2_payload = _structured_content(wavegen_stop_2)
+        assert wavegen_stop_2_payload["ok"] is True
+        assert wavegen_stop_2_payload["data"]["running"] is False
 
         release = await session.call_tool("release_device", {})
         release_payload = _structured_content(release)

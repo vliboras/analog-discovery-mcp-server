@@ -109,6 +109,8 @@ class WavegenChannelLimits:
     offset_max_v: float
     duty_cycle_min_percent: float
     duty_cycle_max_percent: float
+    phase_min_degrees: float = -360.0
+    phase_max_degrees: float = 360.0
     custom_sample_count_min: int | None = None
     custom_sample_count_max: int | None = None
 
@@ -133,6 +135,7 @@ class WavegenConfig:
     amplitude_v: float
     offset_v: float
     duty_cycle_percent: float
+    phase_degrees: float | None = None
     samples: list[float] | None = None
     sample_rate_hz: float | None = None
 

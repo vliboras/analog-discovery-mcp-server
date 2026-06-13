@@ -219,6 +219,25 @@ class FakeWaveFormsSdk:
         self._set_value(channel_count, 2)
         return self._result("FDwfAnalogOutCount")
 
+    def FDwfAnalogOutMasterSet(
+        self,
+        handle: object,
+        channel_index: object,
+        master_index: object,
+    ) -> int:
+        self._record("FDwfAnalogOutMasterSet", handle, channel_index, master_index)
+        return self._result("FDwfAnalogOutMasterSet")
+
+    def FDwfAnalogOutMasterGet(
+        self,
+        handle: object,
+        channel_index: object,
+        master_index: object,
+    ) -> int:
+        self._record("FDwfAnalogOutMasterGet", handle, channel_index)
+        self._set_value(master_index, 0)
+        return self._result("FDwfAnalogOutMasterGet")
+
     def FDwfAnalogOutNodeInfo(
         self,
         handle: object,
@@ -304,6 +323,19 @@ class FakeWaveFormsSdk:
         self._set_value(duty_min, 0.0)
         self._set_value(duty_max, 100.0)
         return self._result("FDwfAnalogOutNodeSymmetryInfo")
+
+    def FDwfAnalogOutNodePhaseInfo(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        phase_min: object,
+        phase_max: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodePhaseInfo", handle, channel_index, node_index)
+        self._set_value(phase_min, -360.0)
+        self._set_value(phase_max, 360.0)
+        return self._result("FDwfAnalogOutNodePhaseInfo")
 
     def FDwfAnalogOutReset(self, handle: object, channel_index: object) -> int:
         self._record("FDwfAnalogOutReset", handle, channel_index)
@@ -391,6 +423,16 @@ class FakeWaveFormsSdk:
     ) -> int:
         self._record("FDwfAnalogOutNodeSymmetrySet", handle, channel_index, node_index, duty_cycle)
         return self._result("FDwfAnalogOutNodeSymmetrySet")
+
+    def FDwfAnalogOutNodePhaseSet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        phase_degrees: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodePhaseSet", handle, channel_index, node_index, phase_degrees)
+        return self._result("FDwfAnalogOutNodePhaseSet")
 
     def FDwfAnalogOutConfigure(self, handle: object, channel_index: object, start: object) -> int:
         self._record("FDwfAnalogOutConfigure", handle, channel_index, start)
@@ -503,6 +545,17 @@ class FakeWaveFormsSdk:
         self._record("FDwfAnalogOutNodeSymmetryGet", handle, channel_index, node_index)
         self._set_value(duty_cycle, 50.0)
         return self._result("FDwfAnalogOutNodeSymmetryGet")
+
+    def FDwfAnalogOutNodePhaseGet(
+        self,
+        handle: object,
+        channel_index: object,
+        node_index: object,
+        phase_degrees: object,
+    ) -> int:
+        self._record("FDwfAnalogOutNodePhaseGet", handle, channel_index, node_index)
+        self._set_value(phase_degrees, 0.0)
+        return self._result("FDwfAnalogOutNodePhaseGet")
 
     def FDwfGetLastErrorMsg(self, message: object) -> None:
         cast(Any, message).value = self.last_error.encode("utf-8")
@@ -861,6 +914,98 @@ def test_real_wavegen_start_configures_custom_output() -> None:
         "FDwfAnalogOutConfigure",
     ]
     adapter.close()
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_synchronized_wavegen_configures_master_and_phase() -> None:
+    sdk = FakeWaveFormsSdk()
+    adapter = _adapter_with_sdk(sdk)
+
+    statuses = adapter.start_synchronized_wavegen(
+        device_index=0,
+        configs=[
+            WavegenConfig(
+                channel=1,
+                waveform="sine",
+                frequency_hz=1000.0,
+                amplitude_v=2.0,
+                offset_v=0.0,
+                duty_cycle_percent=50.0,
+                phase_degrees=0.0,
+            ),
+            WavegenConfig(
+                channel=2,
+                waveform="sine",
+                frequency_hz=1000.0,
+                amplitude_v=2.0,
+                offset_v=0.0,
+                duty_cycle_percent=50.0,
+                phase_degrees=180.0,
+            ),
+        ],
+        master_channel=1,
+    )
+
+    assert [status.channel for status in statuses] == [1, 2]
+    assert all(status.running for status in statuses)
+    assert _call_names(sdk) == [
+        "FDwfDeviceOpen",
+        "FDwfDeviceAutoConfigureSet",
+        "FDwfAnalogOutReset",
+        "FDwfAnalogOutReset",
+        "FDwfAnalogOutNodeEnableSet",
+        "FDwfAnalogOutNodeFunctionSet",
+        "FDwfAnalogOutNodeFrequencySet",
+        "FDwfAnalogOutNodeAmplitudeSet",
+        "FDwfAnalogOutNodeOffsetSet",
+        "FDwfAnalogOutNodeSymmetrySet",
+        "FDwfAnalogOutNodePhaseSet",
+        "FDwfAnalogOutMasterSet",
+        "FDwfAnalogOutNodeEnableSet",
+        "FDwfAnalogOutNodeFunctionSet",
+        "FDwfAnalogOutNodeFrequencySet",
+        "FDwfAnalogOutNodeAmplitudeSet",
+        "FDwfAnalogOutNodeOffsetSet",
+        "FDwfAnalogOutNodeSymmetrySet",
+        "FDwfAnalogOutNodePhaseSet",
+        "FDwfAnalogOutConfigure",
+        "FDwfAnalogOutConfigure",
+    ]
+    adapter.close()
+    assert _call_names(sdk)[-1] == "FDwfDeviceClose"
+
+
+def test_real_synchronized_wavegen_closes_device_when_sdk_call_fails() -> None:
+    sdk = FakeWaveFormsSdk()
+    sdk.fail_on = "FDwfAnalogOutNodePhaseSet"
+    adapter = _adapter_with_sdk(sdk)
+
+    with pytest.raises(DwfError, match="fake sdk failure"):
+        adapter.start_synchronized_wavegen(
+            device_index=0,
+            configs=[
+                WavegenConfig(
+                    channel=1,
+                    waveform="sine",
+                    frequency_hz=1000.0,
+                    amplitude_v=1.0,
+                    offset_v=0.0,
+                    duty_cycle_percent=50.0,
+                    phase_degrees=0.0,
+                ),
+                WavegenConfig(
+                    channel=2,
+                    waveform="sine",
+                    frequency_hz=1000.0,
+                    amplitude_v=1.0,
+                    offset_v=0.0,
+                    duty_cycle_percent=50.0,
+                    phase_degrees=180.0,
+                ),
+            ],
+            master_channel=1,
+        )
+
     assert _call_names(sdk)[-1] == "FDwfDeviceClose"
 
 

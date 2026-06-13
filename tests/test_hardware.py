@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import math
+import statistics
+from itertools import pairwise
+
 import pytest
 
 from analog_discovery_mcp.dwf import CtypesDwfAdapter
@@ -267,3 +271,74 @@ def test_hardware_stopping_one_wavegen_channel_keeps_other_running() -> None:
     finally:
         released = service.release_device()
         assert released.ok is True
+
+
+@pytest.mark.hardware_stand("advanced")
+def test_hardware_can_start_synchronized_opposite_phase_wavegen() -> None:
+    service = AnalogDiscoveryService(CtypesDwfAdapter())
+
+    try:
+        start = service.start_synchronized_wavegen(
+            channels=[1, 2],
+            waveforms=["sine", "sine"],
+            frequencies_hz=[1000.0, 1000.0],
+            amplitudes_v=[2.0, 2.0],
+            offsets_v=[0.0, 0.0],
+            phase_degrees=[0.0, 180.0],
+        )
+        assert start.ok is True
+
+        capture = service.capture_analog_waveform(
+            channels=[1, 2],
+            sample_rate_hz=100_000.0,
+            sample_count=240,
+            trigger_enabled=True,
+            trigger_channel=1,
+            trigger_level_v=0.0,
+            trigger_edge="rising",
+            trigger_hysteresis_v=0.03,
+            trigger_auto_timeout_seconds=1.0,
+            trigger_position_seconds=0.0002,
+        )
+    finally:
+        released = service.release_device()
+        assert released.ok is True
+
+    assert capture.ok is True
+    assert capture.data is not None
+    samples_1 = [float(sample) for sample in capture.data["samples"]["1"]]
+    samples_2 = [float(sample) for sample in capture.data["samples"]["2"]]
+    sample_rate_hz = float(capture.data["actual_sample_rate_hz"])
+
+    assert capture.data["triggered"] is True
+    assert capture.data["auto_triggered"] is False
+    assert 3.5 <= max(samples_1) - min(samples_1) <= 4.5
+    assert 3.5 <= max(samples_2) - min(samples_2) <= 4.5
+    assert 900.0 <= _estimate_frequency_hz(samples_1, sample_rate_hz) <= 1100.0
+    assert 900.0 <= _estimate_frequency_hz(samples_2, sample_rate_hz) <= 1100.0
+    assert _correlation(samples_1, samples_2) < -0.9
+
+
+def _estimate_frequency_hz(samples: list[float], sample_rate_hz: float) -> float:
+    crossings: list[float] = []
+    for index in range(1, len(samples)):
+        previous = samples[index - 1]
+        current = samples[index]
+        if previous < 0.0 <= current and current != previous:
+            fraction = -previous / (current - previous)
+            crossings.append((index - 1 + fraction) / sample_rate_hz)
+    assert len(crossings) >= 2
+    periods = [later - earlier for earlier, later in pairwise(crossings)]
+    return 1.0 / statistics.fmean(periods)
+
+
+def _correlation(left: list[float], right: list[float]) -> float:
+    assert len(left) == len(right)
+    left_mean = statistics.fmean(left)
+    right_mean = statistics.fmean(right)
+    numerator = sum((a - left_mean) * (b - right_mean) for a, b in zip(left, right, strict=True))
+    denominator = math.sqrt(
+        sum((a - left_mean) ** 2 for a in left) * sum((b - right_mean) ** 2 for b in right)
+    )
+    assert denominator > 0.0
+    return numerator / denominator

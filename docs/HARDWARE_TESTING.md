@@ -63,6 +63,9 @@ Used for:
 - future logic analyzer checks
 - future protocol-oriented smoke tests
 
+Use [REAL_AGENT_VALIDATION.md](REAL_AGENT_VALIDATION.md) as the external
+real-agent MCP validation contract for this stand.
+
 ## Stand Selection
 
 Broader stands satisfy narrower tests:

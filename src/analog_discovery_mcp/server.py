@@ -110,7 +110,7 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
         trigger_auto_timeout_seconds: float = 1.0,
         trigger_position_seconds: float | None = None,
     ) -> dict[str, object]:
-        """Measure core voltage statistics from one analog waveform capture."""
+        """Measure one channel; trigger_channel must match channel when provided."""
 
         return service.measure_analog_waveform(
             channel=channel,
@@ -219,6 +219,34 @@ def register_tools(mcp: ToolRegistrar, service: AnalogDiscoveryService) -> None:
             duty_cycle_percent=duty_cycle_percent,
             samples=samples,
             sample_rate_hz=sample_rate_hz,
+            device_index=device_index,
+            serial_number=serial_number,
+        ).model_dump(exclude_none=True)
+
+    @mcp.tool()
+    def start_synchronized_wavegen(
+        channels: list[int] | None = None,
+        waveforms: list[str] | None = None,
+        frequencies_hz: list[float] | None = None,
+        amplitudes_v: list[float] | None = None,
+        offsets_v: list[float] | None = None,
+        duty_cycles_percent: list[float] | None = None,
+        phase_degrees: list[float] | None = None,
+        master_channel: int = 1,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> dict[str, object]:
+        """Start synchronized Wavegen outputs on multiple analog output channels."""
+
+        return service.start_synchronized_wavegen(
+            channels=channels,
+            waveforms=waveforms,
+            frequencies_hz=frequencies_hz,
+            amplitudes_v=amplitudes_v,
+            offsets_v=offsets_v,
+            duty_cycles_percent=duty_cycles_percent,
+            phase_degrees=phase_degrees,
+            master_channel=master_channel,
             device_index=device_index,
             serial_number=serial_number,
         ).model_dump(exclude_none=True)

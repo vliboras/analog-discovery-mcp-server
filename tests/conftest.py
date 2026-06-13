@@ -269,6 +269,31 @@ class RecordingDwfAdapter(DwfAdapter):
         self.wavegen_state[config.channel] = status
         return status
 
+    def start_synchronized_wavegen(
+        self,
+        device_index: int,
+        configs: list[WavegenConfig],
+        master_channel: int,
+    ) -> list[WavegenStatus]:
+        self.wavegen_calls.append(
+            (
+                "sync_start",
+                device_index,
+                {"configs": configs, "master_channel": master_channel},
+            )
+        )
+        statuses: list[WavegenStatus] = []
+        for config in configs:
+            status = WavegenStatus(
+                channel=config.channel,
+                state=3,
+                running=True,
+                config=config,
+            )
+            self.wavegen_state[config.channel] = status
+            statuses.append(status)
+        return statuses
+
     def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
         self.wavegen_calls.append(("stop", device_index, channel))
         previous = self.wavegen_state[channel]

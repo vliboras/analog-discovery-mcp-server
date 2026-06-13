@@ -50,6 +50,7 @@ def test_registers_expected_tools() -> None:
         "release_device",
         "read_digital_inputs",
         "read_analog_voltage",
+        "start_synchronized_wavegen",
         "start_wavegen",
         "stop_wavegen",
         "write_digital_outputs",
@@ -91,6 +92,7 @@ def test_registered_tools_call_service() -> None:
     digital_write = mcp.tools["write_digital_outputs"](pins=[0, 1], values=[True, False])
     wavegen_limits = mcp.tools["get_wavegen_limits"]()
     wavegen_status = mcp.tools["start_wavegen"](channel=1, waveform="square")
+    synchronized_wavegen_status = mcp.tools["start_synchronized_wavegen"]()
     release = mcp.tools["release_device"]()
 
     assert version == {"ok": True, "data": {"version": "3.24.3"}}
@@ -131,10 +133,14 @@ def test_registered_tools_call_service() -> None:
     assert isinstance(wavegen_status, dict)
     assert wavegen_status["ok"] is True
     assert wavegen_status["data"]["running"] is True
+    assert isinstance(synchronized_wavegen_status, dict)
+    assert synchronized_wavegen_status["ok"] is True
+    assert synchronized_wavegen_status["data"]["synchronized"] is True
+    assert synchronized_wavegen_status["data"]["slave_channels"] == [2]
     assert isinstance(release, dict)
     assert release["ok"] is True
     assert release["data"]["released"] is True
-    assert release["data"]["wavegen_channels_stopped"] == [1]
+    assert release["data"]["wavegen_channels_stopped"] == [1, 2]
 
 
 def test_tool_signatures_are_simple_for_mcp_schema() -> None:
@@ -159,6 +165,16 @@ def test_tool_signatures_are_simple_for_mcp_schema() -> None:
     assert wavegen_annotations["frequency_hz"] is float
     assert wavegen_annotations["samples"] == list[float] | None
     assert wavegen_annotations["sample_rate_hz"] == float | None
+
+    sync_annotations = get_type_hints(mcp.tools["start_synchronized_wavegen"])
+    assert sync_annotations["channels"] == list[int] | None
+    assert sync_annotations["waveforms"] == list[str] | None
+    assert sync_annotations["frequencies_hz"] == list[float] | None
+    assert sync_annotations["phase_degrees"] == list[float] | None
+    assert sync_annotations["master_channel"] is int
+    assert "trigger_channel must match channel" in (
+        mcp.tools["measure_analog_waveform"].__doc__ or ""
+    )
 
     digital_read_annotations = get_type_hints(mcp.tools["read_digital_inputs"])
     assert digital_read_annotations["pins"] == list[int] | None

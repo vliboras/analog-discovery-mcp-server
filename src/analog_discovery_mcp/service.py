@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
+from typing import TypeVar
 
 from analog_discovery_mcp.adapters import DwfAdapter
 from analog_discovery_mcp.dwf import DwfError
@@ -31,6 +32,9 @@ DEFAULT_WAVEGEN_FREQUENCY_HZ = 1000.0
 DEFAULT_WAVEGEN_AMPLITUDE_V = 1.0
 DEFAULT_WAVEGEN_OFFSET_V = 0.0
 DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT = 50.0
+DEFAULT_SYNC_WAVEGEN_CHANNELS = [1, 2]
+DEFAULT_SYNC_WAVEGEN_PHASE_DEGREES = [0.0, 180.0]
+T = TypeVar("T")
 
 
 class AnalogDiscoveryService:
@@ -327,6 +331,7 @@ class AnalogDiscoveryService:
                 amplitude_v=amplitude_v,
                 offset_v=offset_v,
                 duty_cycle_percent=duty_cycle_percent,
+                phase_degrees=None,
                 samples=samples,
                 sample_rate_hz=sample_rate_hz,
                 limits=limits,
@@ -335,6 +340,45 @@ class AnalogDiscoveryService:
             return ToolResult(
                 ok=True,
                 data=_wavegen_status_payload(status, selected_device),
+            )
+        except (DwfError, ValueError) as exc:
+            return ToolResult(ok=False, error=str(exc))
+
+    def start_synchronized_wavegen(
+        self,
+        channels: list[int] | None = None,
+        waveforms: list[str] | None = None,
+        frequencies_hz: list[float] | None = None,
+        amplitudes_v: list[float] | None = None,
+        offsets_v: list[float] | None = None,
+        duty_cycles_percent: list[float] | None = None,
+        phase_degrees: list[float] | None = None,
+        master_channel: int = 1,
+        device_index: int | None = None,
+        serial_number: str | None = None,
+    ) -> ToolResult:
+        try:
+            selected_device = self._select_device(device_index, serial_number)
+            limits = self._adapter.get_wavegen_limits(selected_device.index)
+            configs = _build_synchronized_wavegen_configs(
+                channels=channels,
+                waveforms=waveforms,
+                frequencies_hz=frequencies_hz,
+                amplitudes_v=amplitudes_v,
+                offsets_v=offsets_v,
+                duty_cycles_percent=duty_cycles_percent,
+                phase_degrees=phase_degrees,
+                master_channel=master_channel,
+                limits=limits,
+            )
+            statuses = self._adapter.start_synchronized_wavegen(
+                selected_device.index,
+                configs,
+                master_channel,
+            )
+            return ToolResult(
+                ok=True,
+                data=_synchronized_wavegen_payload(statuses, master_channel, selected_device),
             )
         except (DwfError, ValueError) as exc:
             return ToolResult(ok=False, error=str(exc))
@@ -613,6 +657,7 @@ def _build_wavegen_config(
     amplitude_v: float,
     offset_v: float,
     duty_cycle_percent: float,
+    phase_degrees: float | None,
     samples: list[float] | None,
     sample_rate_hz: float | None,
     limits: WavegenLimits,
@@ -631,6 +676,7 @@ def _build_wavegen_config(
         amplitude_v=amplitude_v,
         offset_v=offset_v,
         duty_cycle_percent=duty_cycle_percent,
+        phase_degrees=phase_degrees,
         sample_rate_hz=sample_rate_hz,
     ).items():
         if not math.isfinite(value):
@@ -643,6 +689,13 @@ def _build_wavegen_config(
         channel_limits.offset_min_v,
         channel_limits.offset_max_v,
     )
+    if phase_degrees is not None:
+        _validate_range(
+            "phase_degrees",
+            phase_degrees,
+            channel_limits.phase_min_degrees,
+            channel_limits.phase_max_degrees,
+        )
 
     if normalized_waveform == "custom":
         if samples is None:
@@ -670,6 +723,7 @@ def _build_wavegen_config(
             amplitude_v=amplitude_v,
             offset_v=offset_v,
             duty_cycle_percent=duty_cycle_percent,
+            phase_degrees=phase_degrees,
             samples=custom_samples,
             sample_rate_hz=sample_rate_hz,
         )
@@ -687,6 +741,7 @@ def _build_wavegen_config(
             amplitude_v=0.0,
             offset_v=offset_v,
             duty_cycle_percent=duty_cycle_percent,
+            phase_degrees=phase_degrees,
         )
 
     _validate_range(
@@ -715,7 +770,88 @@ def _build_wavegen_config(
         amplitude_v=amplitude_v,
         offset_v=offset_v,
         duty_cycle_percent=duty_cycle_percent,
+        phase_degrees=phase_degrees,
     )
+
+
+def _build_synchronized_wavegen_configs(
+    *,
+    channels: list[int] | None,
+    waveforms: list[str] | None,
+    frequencies_hz: list[float] | None,
+    amplitudes_v: list[float] | None,
+    offsets_v: list[float] | None,
+    duty_cycles_percent: list[float] | None,
+    phase_degrees: list[float] | None,
+    master_channel: int,
+    limits: WavegenLimits,
+) -> list[WavegenConfig]:
+    requested_channels = DEFAULT_SYNC_WAVEGEN_CHANNELS if channels is None else channels
+    if not requested_channels:
+        raise ValueError("channels must not be empty")
+    if len(set(requested_channels)) != len(requested_channels):
+        raise ValueError("channels must not contain duplicates")
+    if master_channel not in requested_channels:
+        raise ValueError("master_channel must be included in channels")
+
+    _validate_parallel_length("waveforms", waveforms, requested_channels)
+    _validate_parallel_length("frequencies_hz", frequencies_hz, requested_channels)
+    _validate_parallel_length("amplitudes_v", amplitudes_v, requested_channels)
+    _validate_parallel_length("offsets_v", offsets_v, requested_channels)
+    _validate_parallel_length("duty_cycles_percent", duty_cycles_percent, requested_channels)
+    _validate_parallel_length("phase_degrees", phase_degrees, requested_channels)
+
+    default_phases = (
+        DEFAULT_SYNC_WAVEGEN_PHASE_DEGREES
+        if len(requested_channels) == len(DEFAULT_SYNC_WAVEGEN_PHASE_DEGREES)
+        else [0.0 for _channel in requested_channels]
+    )
+    configs: list[WavegenConfig] = []
+    for index, channel in enumerate(requested_channels):
+        waveform = _parallel_value(waveforms, index, DEFAULT_WAVEGEN_WAVEFORM)
+        if waveform.strip().lower() == "custom":
+            raise ValueError("custom waveform is not supported by start_synchronized_wavegen")
+        config = _build_wavegen_config(
+            channel=channel,
+            waveform=waveform,
+            frequency_hz=_parallel_value(
+                frequencies_hz,
+                index,
+                DEFAULT_WAVEGEN_FREQUENCY_HZ,
+            ),
+            amplitude_v=_parallel_value(
+                amplitudes_v,
+                index,
+                DEFAULT_WAVEGEN_AMPLITUDE_V,
+            ),
+            offset_v=_parallel_value(offsets_v, index, DEFAULT_WAVEGEN_OFFSET_V),
+            duty_cycle_percent=_parallel_value(
+                duty_cycles_percent,
+                index,
+                DEFAULT_WAVEGEN_DUTY_CYCLE_PERCENT,
+            ),
+            phase_degrees=_parallel_value(phase_degrees, index, default_phases[index]),
+            samples=None,
+            sample_rate_hz=None,
+            limits=limits,
+        )
+        configs.append(config)
+    return configs
+
+
+def _validate_parallel_length(
+    name: str,
+    values: Sequence[object] | None,
+    channels: list[int],
+) -> None:
+    if values is not None and len(values) != len(channels):
+        raise ValueError(f"{name} length must match channels length")
+
+
+def _parallel_value(values: Sequence[T] | None, index: int, default: T) -> T:
+    if values is None:
+        return default
+    return values[index]
 
 
 def _validate_wavegen_channel(channel: int, limits: WavegenLimits) -> None:
@@ -731,6 +867,7 @@ def _wavegen_numeric_values(
     amplitude_v: float,
     offset_v: float,
     duty_cycle_percent: float,
+    phase_degrees: float | None,
     sample_rate_hz: float | None,
 ) -> dict[str, float]:
     values = {
@@ -739,6 +876,8 @@ def _wavegen_numeric_values(
         "offset_v": offset_v,
         "duty_cycle_percent": duty_cycle_percent,
     }
+    if phase_degrees is not None:
+        values["phase_degrees"] = phase_degrees
     if sample_rate_hz is not None:
         values["sample_rate_hz"] = sample_rate_hz
     return values
@@ -789,5 +928,35 @@ def _wavegen_status_payload(
         "state": status.state,
         "running": status.running,
         "config": config,
+        "device": asdict(selected_device),
+    }
+
+
+def _synchronized_wavegen_payload(
+    statuses: list[WavegenStatus],
+    master_channel: int,
+    selected_device: DeviceInfo,
+) -> dict[str, object]:
+    slave_channels = [status.channel for status in statuses if status.channel != master_channel]
+    status_payloads = []
+    for status in statuses:
+        config = (
+            {key: value for key, value in asdict(status.config).items() if value is not None}
+            if status.config
+            else None
+        )
+        status_payloads.append(
+            {
+                "channel": status.channel,
+                "state": status.state,
+                "running": status.running,
+                "config": config,
+            }
+        )
+    return {
+        "synchronized": True,
+        "master_channel": master_channel,
+        "slave_channels": slave_channels,
+        "statuses": status_payloads,
         "device": asdict(selected_device),
     }

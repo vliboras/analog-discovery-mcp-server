@@ -156,9 +156,10 @@ client/agent session.
 - Run hardware checks:
   - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=basic rtk uv run pytest -m hardware -q`
   - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced rtk uv run pytest -m hardware -q`
-- Run real MCP client/agent validation against hardware for version, device
-  listing, analog voltage/status, capture, measurement, Wavegen start/status/stop
-  on both channels, digital loopback read/write checks, and `release_device`.
+- Run external real MCP client/agent validation against hardware for discovery,
+  analog capture, Wavegen, synchronized Wavegen, digital loopback, negative
+  behavior, and cleanup using the scenario contract in
+  [REAL_AGENT_VALIDATION.md](REAL_AGENT_VALIDATION.md).
 - Fix only bugs, reliability issues, docs gaps, and safety issues discovered
   during validation before resuming Stage 4 logic analyzer or digital pattern
   work.
@@ -200,6 +201,8 @@ Ready state: the project is ready for broader public use and maintenance.
   usage notes.
 - `docs/ROADMAP.md`: staged development plan and future-agent project memory.
 - `docs/HARDWARE_TESTING.md`: hardware test stand setup and selection.
+- `docs/REAL_AGENT_VALIDATION.md`: external real MCP client/agent validation
+  scenario contract and fix-decision rules.
 - `CHANGELOG.md`: release history.
 - `CONTRIBUTING.md`: local development and test commands.
 - `SECURITY.md`: minimal vulnerability-reporting policy.

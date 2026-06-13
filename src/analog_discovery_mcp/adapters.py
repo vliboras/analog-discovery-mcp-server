@@ -65,6 +65,14 @@ class DwfAdapter(Protocol):
     def start_wavegen(self, device_index: int, config: WavegenConfig) -> WavegenStatus:
         """Start analog output generation."""
 
+    def start_synchronized_wavegen(
+        self,
+        device_index: int,
+        configs: list[WavegenConfig],
+        master_channel: int,
+    ) -> list[WavegenStatus]:
+        """Start synchronized analog output generation."""
+
     def stop_wavegen(self, device_index: int, channel: int) -> WavegenStatus:
         """Stop analog output generation."""
 
