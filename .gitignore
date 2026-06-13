@@ -27,8 +27,3 @@ env/
 
 # Node, in case docs/tools add it later
 node_modules/
-
-# Local agent/index artifacts
-.agents/
-.codegraph/
-skills-lock.json

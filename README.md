@@ -27,28 +27,38 @@ WaveForms includes the WaveForms SDK dynamic library used by this server:
 - macOS: `/Library/Frameworks/dwf.framework/dwf`
 - Linux: `libdwf.so`
 
-## Install
+## Install From PyPI
 
-From a clone of this repository:
+Run directly with `uvx`:
 
 ```bash
-uv sync
+uvx analog-discovery-mcp-server
 ```
 
-Run the server locally:
+Or install into an environment:
 
 ```bash
-uv run analog-discovery-mcp-server
+pip install analog-discovery-mcp-server
+analog-discovery-mcp-server
 ```
 
 The server uses MCP stdio transport. Your MCP client starts this process and talks to it over standard input/output; no port or web server is opened.
+
+## Install From Source
+
+For local development from a clone of this repository:
+
+```bash
+uv sync
+uv run analog-discovery-mcp-server
+```
 
 ## Run Without Hardware
 
 Use the fake backend to test MCP client wiring when no Analog Discovery device is connected:
 
 ```bash
-AD_MCP_DWF_BACKEND=fake uv run analog-discovery-mcp-server
+AD_MCP_DWF_BACKEND=fake uvx analog-discovery-mcp-server
 ```
 
 The fake backend is deterministic and for demos only. It reports one fake Analog Discovery 3 device,
@@ -63,6 +73,21 @@ Example local configuration:
 {
   "mcpServers": {
     "analog-discovery": {
+      "command": "uvx",
+      "args": [
+        "analog-discovery-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+Development configuration from a source checkout:
+
+```json
+{
+  "mcpServers": {
+    "analog-discovery-dev": {
       "command": "uv",
       "args": [
         "--directory",
@@ -318,7 +343,8 @@ Outputs include selected `pins`, string-keyed boolean `values`, `output_enable_m
 uv sync
 uv run ruff check
 uv run mypy
-uv run pytest
+uv run pytest -q
+uv build
 ```
 
 Test the MCP server without hardware:
@@ -336,7 +362,7 @@ AD_MCP_HARDWARE_TESTS=1 uv run pytest -m hardware
 Hardware tests can also select a documented physical stand:
 
 ```bash
-AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced uv run pytest -m hardware
+AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced uv run pytest -m hardware -q
 ```
 
 Available stands are documented in [docs/HARDWARE_TESTING.md](docs/HARDWARE_TESTING.md).

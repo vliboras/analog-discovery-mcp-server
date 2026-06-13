@@ -13,7 +13,8 @@ uv sync
 ```bash
 uv run ruff check
 uv run mypy
-uv run pytest
+uv run pytest -q
+uv build
 ```
 
 ## Local Run
@@ -38,4 +39,24 @@ Optional hardware tests are skipped unless explicitly enabled:
 
 ```bash
 AD_MCP_HARDWARE_TESTS=1 uv run pytest -m hardware
+```
+
+Run a specific documented stand:
+
+```bash
+AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=basic uv run pytest -m hardware -q
+AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced uv run pytest -m hardware -q
+```
+
+## Release
+
+Before publishing, run the checks above and inspect the sdist and wheel contents
+for unintended local files or machine-specific paths.
+
+For the first public release, publish GitHub and PyPI before adding MCP Registry
+metadata:
+
+```bash
+git tag v0.2.0-alpha
+uv publish
 ```

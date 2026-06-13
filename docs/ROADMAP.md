@@ -1,8 +1,8 @@
 # Analog Discovery MCP Server Roadmap
 
 This file is the persistent development plan for future maintainers and coding agents.
-Keep it aligned with the implemented MCP tool surface as the project moves toward a
-public GitHub release.
+Keep it aligned with the implemented MCP tool surface after the first public
+GitHub and PyPI release.
 
 ## Current Baseline
 
@@ -33,9 +33,10 @@ reporting, small analog waveform captures with analog edge triggers, core
 waveform measurements, analog input status reporting, basic Wavegen output
 control including bounded repeated custom samples, and explicit safe release of
 active outputs/device ownership. Static digital I/O is implemented for 32-bit
-WaveForms DigitalIO masks targeting Analog Discovery 2/3. Feature development
-is paused at this Stage 4A surface while the project runs a real-hardware
-validation checkpoint with a real MCP client/agent.
+WaveForms DigitalIO masks targeting Analog Discovery 2/3. The Stage 4A hardware
+validation checkpoint is complete, including automated hardware tests and
+external real MCP client/agent validation. Feature work stays paused until the
+`0.2.0` public release polish is published.
 
 ## Development Stages
 
@@ -117,7 +118,7 @@ Ready state: the MCP server supports common mixed-signal workflows.
 - Keep pin/channel numbering consistent with WaveForms and document the
   user-facing numbering clearly.
 
-### Stage 4A: Digital Static I/O - Implemented, Awaiting Hardware Validation
+### Stage 4A: Digital Static I/O - Implemented And Validated
 
 Ready state: the MCP server can read and drive static DIO pins for simple
 mixed-signal checks.
@@ -133,36 +134,51 @@ mixed-signal checks.
   digital inputs.
 - Real backend uses WaveForms `FDwfDigitalIO*` static I/O functions with 32-bit
   masks for Analog Discovery 2/3.
-- Stage 4 logic analyzer and digital pattern output remain pending.
+- Hardware validation is complete for the Stage 4A surface.
+- Stage 4 logic analyzer and digital pattern output remain pending until after
+  the first public release.
 
-### Hardware Validation Checkpoint - Active
+### Hardware Validation Checkpoint - Complete
 
 Ready state: the current Stage 4A tool surface has been exercised on real
 Analog Discovery hardware through both automated hardware tests and a real MCP
 client/agent session.
 
-- Pause new feature development until this checkpoint is complete.
+- Completed for the `0.2.0` public alpha release.
 - Keep the public MCP tool/API surface stable except for validation-driven bug
   fixes and safety/reliability additions such as `release_device`.
-- Use two hardware stands:
+- Validation used two hardware stands:
   - `basic`: connected Analog Discovery device with WaveForms installed and no
     required signal wiring.
   - `advanced`: W1 to Scope `1+`, W2 to Scope `2+`, common GND references, and
     DIO0-DIO7 looped to DIO8-DIO15 respectively.
-- Run full local checks:
+- Full local checks:
   - `rtk uv run ruff check`
   - `rtk uv run mypy`
   - `rtk uv run pytest`
-- Run hardware checks:
+- Hardware checks:
   - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=basic rtk uv run pytest -m hardware -q`
   - `AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced rtk uv run pytest -m hardware -q`
-- Run external real MCP client/agent validation against hardware for discovery,
+- External real MCP client/agent validation covered discovery,
   analog capture, Wavegen, synchronized Wavegen, digital loopback, negative
   behavior, and cleanup using the scenario contract in
   [REAL_AGENT_VALIDATION.md](REAL_AGENT_VALIDATION.md).
-- Fix only bugs, reliability issues, docs gaps, and safety issues discovered
-  during validation before resuming Stage 4 logic analyzer or digital pattern
-  work.
+- No raw validation artifacts are stored in the repository. Curated summaries
+  belong in release notes or validation docs only when they help users or
+  maintainers.
+
+### First Public Release Polish - Active
+
+Ready state: the private repository is ready to become public and the package is
+ready for PyPI as `0.2.0` alpha.
+
+- Keep the PyPI package name `analog-discovery-mcp-server`.
+- Exclude local agent state, caches, build outputs, and absolute machine paths
+  from source distributions.
+- Document PyPI/`uvx` install first, with source checkout workflow second.
+- Publish GitHub and PyPI first.
+- Add MCP Registry metadata only after the PyPI install path is live and
+  verified.
 
 Non-blocking test cleanup notes before a broader public release:
 

@@ -1,5 +1,11 @@
 # Real MCP Agent Validation
 
+## Release Status
+
+For the `0.2.0` public alpha release, maintainers completed the external real
+MCP client/agent validation checkpoint against the `advanced` hardware stand.
+The scenarios below remain the validation contract for future release checks.
+
 This document defines an external, supervised validation contract for checking
 how an independent MCP client/agent uses `analog-discovery-mcp-server` with real
 Analog Discovery hardware.

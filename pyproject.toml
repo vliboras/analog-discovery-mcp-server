@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "analog-discovery-mcp-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for Digilent Analog Discovery devices"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -45,6 +45,20 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/analog_discovery_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/CHANGELOG.md",
+  "/CONTRIBUTING.md",
+  "/LICENSE",
+  "/README.md",
+  "/SECURITY.md",
+  "/docs",
+  "/pyproject.toml",
+  "/src",
+  "/tests",
+  "/uv.lock",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
