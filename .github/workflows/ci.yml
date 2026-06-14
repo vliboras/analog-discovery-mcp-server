@@ -1,8 +1,10 @@
 name: CI
 
 on:
-  push: main, develop
-  pull_request: develop
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [develop]
 
 jobs:
   test:
@@ -28,7 +30,7 @@ jobs:
       - name: Pytest
         run: uv run pytest
 
-package:
+  package:
     runs-on: ubuntu-latest
     needs: test
 
