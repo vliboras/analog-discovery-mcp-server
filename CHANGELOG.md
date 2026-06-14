@@ -4,6 +4,8 @@
 
 ## 0.2.0 - 2026-06-13
 
+- Document AI-assisted project development disclosure and contributor
+  expectations.
 - Simplify hardware test stands to `basic` and `advanced`, with advanced
   covering analog and DIO0-DIO7 to DIO8-DIO15 loopback validation.
 - Add a hardware validation checkpoint to the roadmap before further Stage 4

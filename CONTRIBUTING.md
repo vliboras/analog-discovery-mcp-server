@@ -48,6 +48,15 @@ AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=basic uv run pytest -m hardware -q
 AD_MCP_HARDWARE_TESTS=1 AD_MCP_HARDWARE_STAND=advanced uv run pytest -m hardware -q
 ```
 
+## AI-Assisted Contributions
+
+AI-assisted contributions are welcome. For substantial AI-assisted changes,
+disclose the tool or model used when practical in the pull request notes or
+commit body.
+
+Contributors remain responsible for understanding submitted changes, checking
+license compatibility, running appropriate tests, and preserving hardware safety.
+
 ## Release
 
 Before publishing, run the checks above and inspect the sdist and wheel contents
