@@ -371,6 +371,14 @@ External real MCP client/agent validation scenarios are documented in
 
 The staged development plan lives in [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## AI Assistance
+
+This project was created and developed with help from AI coding agents. Human
+maintainers review, test, and maintain accepted changes, and remain responsible
+for correctness, licensing, safety, and releases.
+
+AI tools are not authors or copyright holders for this project.
+
 ## Safety
 
 Wavegen and digital output tools drive hardware outputs. Verify wiring, voltage range, load, and common ground before starting output.
