@@ -62,10 +62,25 @@ license compatibility, running appropriate tests, and preserving hardware safety
 Before publishing, run the checks above and inspect the sdist and wheel contents
 for unintended local files or machine-specific paths.
 
+Configure PyPI Trusted Publishing for this repository before pushing the release
+tag:
+
+- Workflow: `.github/workflows/release.yml`
+- Environment: `pypi`
+
+The release workflow builds the sdist and wheel, checks them with Twine, runs a
+minimal wheel import smoke check, creates a GitHub release with `dist/*`
+attached, then publishes to PyPI through Trusted Publishing.
+
 For the first public release, publish GitHub and PyPI before adding MCP Registry
-metadata:
+metadata. Keep `pyproject.toml` at version `0.2.0`, then tag and push:
 
 ```bash
-git tag v0.2.0-alpha
-uv publish
+uv run ruff check
+uv run mypy
+uv run pytest -q
+uv build
+git tag v0.2.0
+git push origin v0.2.0
+uvx analog-discovery-mcp-server
 ```

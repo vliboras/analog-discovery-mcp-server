@@ -170,13 +170,16 @@ client/agent session.
 ### First Public Release Polish - Active
 
 Ready state: the private repository is ready to become public and the package is
-ready for PyPI as `0.2.0` alpha.
+ready for PyPI as stable `0.2.0`.
 
 - Keep the PyPI package name `analog-discovery-mcp-server`.
 - Exclude local agent state, caches, build outputs, and absolute machine paths
   from source distributions.
 - Document PyPI/`uvx` install first, with source checkout workflow second.
-- Publish GitHub and PyPI first.
+- Publish GitHub and PyPI first by pushing tag `v0.2.0`; the release workflow
+  attaches `dist/*` to the GitHub release and publishes to PyPI through Trusted
+  Publishing environment `pypi`.
+- Verify the published package with `uvx analog-discovery-mcp-server`.
 - Add MCP Registry metadata only after the PyPI install path is live and
   verified.
 
